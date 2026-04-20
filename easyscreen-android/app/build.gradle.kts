@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.easyscreen"
+    namespace = "to.feng.app.easyscreen"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.easyscreen"
+        applicationId = "to.feng.app.easyscreen"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
