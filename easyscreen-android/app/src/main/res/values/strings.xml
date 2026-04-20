@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EasyScreen</string>
+    <string name="notification_channel_name">屏幕共享</string>
+    <string name="notification_channel_desc">屏幕共享正在进行中</string>
+    <string name="notification_sharing">正在共享屏幕…</string>
+</resources>

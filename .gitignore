@@ -2,14 +2,16 @@
 # Android
 # =============================================
 # Gradle
-.gradle/
-build/
+**/.gradle/
+**/build/
+**/gradle/wrapper/
 !**/gradle-wrapper.jar
 
 # Android Studio / IntelliJ
 .idea/
 *.iml
 local.properties
+**/proguard-rules.pro
 
 # Build outputs
 *.apk
@@ -44,6 +46,9 @@ easyscreen-signaling/easyscreen-signaling.exe
 .DS_Store
 *.log
 Thumbs.db
+
+# Claude Code
+.claude/
 
 # OMC (oh-my-claudecode)
 .omc/
