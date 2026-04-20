@@ -63,7 +63,7 @@ fun EasyScreenTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            // 让状态栏透明，由 Scaffold 的 systemBarsPadding() 处理内容偏移
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
