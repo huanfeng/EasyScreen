@@ -32,7 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.webrtc.SurfaceViewRenderer
 
-class GuestViewModel(private val serverUrl: String) : ViewModel() {
+class GuestViewModel(private val serverUrl: String, private val appContext: android.content.Context) : ViewModel() {
     private val signalingClient = SignalingClient()
     private val gson = Gson()
     private val webRTCManager = WebRTCManager.getInstance()
@@ -59,8 +59,8 @@ class GuestViewModel(private val serverUrl: String) : ViewModel() {
     init {
         // 初始化 WebRTC
         webRTCManager.initialize(
-            android.app.Application(),
-            android.app.Application()
+            appContext,
+            appContext
         )
 
         setupWebRTCCallbacks()
@@ -216,10 +216,10 @@ class GuestViewModel(private val serverUrl: String) : ViewModel() {
     }
 }
 
-class GuestViewModelFactory(private val serverUrl: String) : ViewModelProvider.Factory {
+class GuestViewModelFactory(private val serverUrl: String, private val appContext: android.content.Context) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return GuestViewModel(serverUrl) as T
+        return GuestViewModel(serverUrl, appContext) as T
     }
 }
 
@@ -228,7 +228,7 @@ fun GuestScreen(
     onBack: () -> Unit,
     serverUrl: String
 ) {
-    val viewModel: GuestViewModel = viewModel(factory = GuestViewModelFactory(serverUrl))
+    val viewModel: GuestViewModel = viewModel(factory = GuestViewModelFactory(serverUrl, LocalContext.current.applicationContext))
     val inputCode by viewModel.inputCode.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()

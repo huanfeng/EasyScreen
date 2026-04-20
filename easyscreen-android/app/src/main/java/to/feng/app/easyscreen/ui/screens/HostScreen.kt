@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class HostViewModel(private val serverUrl: String) : ViewModel() {
+class HostViewModel(private val serverUrl: String, private val appContext: android.content.Context) : ViewModel() {
     private val signalingClient = SignalingClient()
     private val gson = Gson()
     private val webRTCManager = WebRTCManager.getInstance()
@@ -58,8 +58,8 @@ class HostViewModel(private val serverUrl: String) : ViewModel() {
     init {
         // 初始化 WebRTC
         webRTCManager.initialize(
-            android.app.Application(),
-            android.app.Application()
+            appContext,
+            appContext
         )
 
         setupWebRTCCallbacks()
@@ -201,7 +201,7 @@ class HostViewModel(private val serverUrl: String) : ViewModel() {
             _statusMessage.value = "正在启动屏幕共享..."
 
             // 启动前台服务
-            ScreenCaptureService.start(android.app.Application(), resultCode, data)
+            ScreenCaptureService.start(appContext, resultCode, data)
 
             // 初始化屏幕采集
             webRTCManager.startScreenCapture(resultCode, data)
@@ -216,7 +216,7 @@ class HostViewModel(private val serverUrl: String) : ViewModel() {
 
     private fun cleanupResources() {
         _isSharing.value = false
-        ScreenCaptureService.stop(android.app.Application())
+        ScreenCaptureService.stop(appContext)
     }
 
     fun stopSharing() {
@@ -231,10 +231,10 @@ class HostViewModel(private val serverUrl: String) : ViewModel() {
     }
 }
 
-class HostViewModelFactory(private val serverUrl: String) : ViewModelProvider.Factory {
+class HostViewModelFactory(private val serverUrl: String, private val appContext: android.content.Context) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return HostViewModel(serverUrl) as T
+        return HostViewModel(serverUrl, appContext) as T
     }
 }
 
@@ -243,7 +243,7 @@ fun HostScreen(
     onBack: () -> Unit,
     serverUrl: String
 ) {
-    val viewModel: HostViewModel = viewModel(factory = HostViewModelFactory(serverUrl))
+    val viewModel: HostViewModel = viewModel(factory = HostViewModelFactory(serverUrl, applicationContext))
     val roomId by viewModel.roomId.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
@@ -252,6 +252,7 @@ fun HostScreen(
 
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val applicationContext = context.applicationContext
 
     // MediaProjection 授权
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
