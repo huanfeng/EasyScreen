@@ -1,7 +1,9 @@
 package to.feng.app.easyscreen.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -229,6 +231,7 @@ fun GuestScreen(
     onBack: () -> Unit,
     serverUrl: String
 ) {
+    val scrollState = rememberScrollState()
     val viewModel: GuestViewModel = viewModel(factory = GuestViewModelFactory(serverUrl, LocalContext.current.applicationContext))
     val inputCode by viewModel.inputCode.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
@@ -254,7 +257,8 @@ fun GuestScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(24.dp)
+            .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // 返回按钮

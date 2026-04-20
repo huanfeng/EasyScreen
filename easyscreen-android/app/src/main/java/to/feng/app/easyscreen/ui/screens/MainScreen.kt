@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ScreenShare
+import androidx.compose.material.icons.automirrored.filled.ScreenShare
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -31,26 +36,45 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// 默认服务器地址，可通过环境变量或配置文件修改
+private const val DEFAULT_SERVER_URL = "ws://10.0.2.2:8081/ws"
+
 @Composable
 fun MainScreen(
     onNavigateToHost: (String) -> Unit,
     onNavigateToGuest: (String) -> Unit
 ) {
-    var serverUrl by rememberSaveable { mutableStateOf("ws://10.0.2.2:8081/ws") }
+    var serverUrl by rememberSaveable { mutableStateOf(DEFAULT_SERVER_URL) }
+    var showServerInput by rememberSaveable { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(24.dp)
+            .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // App 标题
-        Text(
-            text = "EasyScreen",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        // App 标题 + 设置按钮
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "EasyScreen",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            IconButton(onClick = { showServerInput = !showServerInput }) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "服务器设置",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -62,11 +86,25 @@ fun MainScreen(
 
         Spacer(modifier = Modifier.height(48.dp))
 
+        // 服务器地址输入（可折叠）
+        if (showServerInput) {
+            OutlinedTextField(
+                value = serverUrl,
+                onValueChange = { serverUrl = it },
+                label = { Text("服务器地址") },
+                modifier = Modifier.widthIn(max = 400.dp),
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+        }
+
         // 被控端按钮（父母用）—— 大按钮，清晰易点
         Button(
             onClick = { onNavigateToHost(serverUrl) },
             modifier = Modifier
-                .fillMaxWidth()
+                .widthIn(max = 400.dp)
                 .height(120.dp),
             shape = MaterialTheme.shapes.large
         ) {
@@ -75,7 +113,7 @@ fun MainScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.ScreenShare,
+                    imageVector = Icons.AutoMirrored.Filled.ScreenShare,
                     contentDescription = null,
                     modifier = Modifier.size(36.dp)
                 )
@@ -98,7 +136,7 @@ fun MainScreen(
         OutlinedButton(
             onClick = { onNavigateToGuest(serverUrl) },
             modifier = Modifier
-                .fillMaxWidth()
+                .widthIn(max = 400.dp)
                 .height(120.dp),
             shape = MaterialTheme.shapes.large
         ) {
@@ -123,18 +161,5 @@ fun MainScreen(
                 )
             }
         }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // 服务器地址配置（方便真机测试时修改 IP）
-        OutlinedTextField(
-            value = serverUrl,
-            onValueChange = { serverUrl = it },
-            label = { Text("服务器地址") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            textStyle = LocalTextStyle.current.copy(fontSize = 14.sp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
-        )
     }
 }
