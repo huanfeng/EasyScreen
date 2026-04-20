@@ -243,16 +243,16 @@ fun HostScreen(
     onBack: () -> Unit,
     serverUrl: String
 ) {
+    val context = LocalContext.current
+    val applicationContext = context.applicationContext
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     val viewModel: HostViewModel = viewModel(factory = HostViewModelFactory(serverUrl, applicationContext))
     val roomId by viewModel.roomId.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val guestConnected by viewModel.guestConnected.collectAsState()
     val isSharing by viewModel.isSharing.collectAsState()
-
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val applicationContext = context.applicationContext
 
     // MediaProjection 授权
     val mediaProjectionLauncher = rememberLauncherForActivityResult(
