@@ -1,4 +1,4 @@
-package com.example.easyscreen.ui.theme
+package to.feng.app.easyscreen.ui.theme
 
 import android.app.Activity
 import android.os.Build

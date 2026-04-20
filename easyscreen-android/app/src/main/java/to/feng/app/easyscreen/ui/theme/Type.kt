@@ -1,4 +1,4 @@
-package com.example.easyscreen.ui.theme
+package to.feng.app.easyscreen.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

@@ -1,4 +1,4 @@
-package com.example.easyscreen.data
+package to.feng.app.easyscreen.data
 
 import android.util.Log
 import com.google.gson.Gson

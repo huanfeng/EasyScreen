@@ -1,4 +1,4 @@
-package com.example.easyscreen.ui.screens
+package to.feng.app.easyscreen.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

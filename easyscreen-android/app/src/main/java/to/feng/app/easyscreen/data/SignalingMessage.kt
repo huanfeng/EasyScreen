@@ -1,4 +1,4 @@
-package com.example.easyscreen.data
+package to.feng.app.easyscreen.data
 
 import com.google.gson.annotations.SerializedName
 

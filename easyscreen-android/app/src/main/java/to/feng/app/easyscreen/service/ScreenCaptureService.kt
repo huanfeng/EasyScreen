@@ -1,4 +1,4 @@
-package com.example.easyscreen.service
+package to.feng.app.easyscreen.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -17,8 +17,8 @@ class ScreenCaptureService : Service() {
         private const val CHANNEL_ID = "screen_capture_channel"
         private const val NOTIFICATION_ID = 1
 
-        const val ACTION_START = "com.example.easyscreen.action.START_CAPTURE"
-        const val ACTION_STOP = "com.example.easyscreen.action.STOP_CAPTURE"
+        const val ACTION_START = "to.feng.app.easyscreen.action.START_CAPTURE"
+        const val ACTION_STOP = "to.feng.app.easyscreen.action.STOP_CAPTURE"
 
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"

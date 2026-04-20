@@ -1,4 +1,4 @@
-package com.example.easyscreen
+package to.feng.app.easyscreen
 
 import android.net.Uri
 import android.os.Bundle
@@ -15,10 +15,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.easyscreen.ui.screens.GuestScreen
-import com.example.easyscreen.ui.screens.HostScreen
-import com.example.easyscreen.ui.screens.MainScreen
-import com.example.easyscreen.ui.theme.EasyScreenTheme
+import to.feng.app.easyscreen.ui.screens.GuestScreen
+import to.feng.app.easyscreen.ui.screens.HostScreen
+import to.feng.app.easyscreen.ui.screens.MainScreen
+import to.feng.app.easyscreen.ui.theme.EasyScreenTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -1,4 +1,4 @@
-package com.example.easyscreen.ui.screens
+package to.feng.app.easyscreen.ui.screens
 
 import android.app.Activity
 import android.content.Intent
@@ -21,12 +21,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.easyscreen.data.*
-import com.example.easyscreen.service.ScreenCaptureService
-import com.example.easyscreen.ui.theme.ConnectedGreen
-import com.example.easyscreen.ui.theme.ErrorRed
-import com.example.easyscreen.ui.theme.WaitingAmber
-import com.example.easyscreen.webrtc.WebRTCManager
+import to.feng.app.easyscreen.data.*
+import to.feng.app.easyscreen.service.ScreenCaptureService
+import to.feng.app.easyscreen.ui.theme.ConnectedGreen
+import to.feng.app.easyscreen.ui.theme.ErrorRed
+import to.feng.app.easyscreen.ui.theme.WaitingAmber
+import to.feng.app.easyscreen.webrtc.WebRTCManager
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
