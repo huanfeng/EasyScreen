@@ -39,12 +39,29 @@
 
     <!-- 视频阶段：全屏覆盖，按钮浮动叠加 -->
     <section id="video-view" class="hidden video-stage">
-      <video id="remote-video" autoplay playsinline muted></video>
+      <!-- video-canvas 容器接收手势，video 元素挂在内部做 transform -->
+      <div id="video-canvas" class="video-canvas">
+        <video id="remote-video" autoplay playsinline muted></video>
+      </div>
       <div id="overlay" class="overlay">
         <div class="spinner"></div>
         <p id="overlay-text">正在建立连接…</p>
       </div>
+
+      <!-- 顶部小气泡：分辨率 + 码率 + 连接模式（不再占据底部画面） -->
       <span id="stats" class="stats floating-stats"></span>
+
+      <!-- 缩放控制条（左下） -->
+      <div id="zoom-bar" class="zoom-bar">
+        <button id="zoom-out" class="floating-action zoom-btn" aria-label="缩小">−</button>
+        <span id="zoom-label" class="zoom-label">100%</span>
+        <button id="zoom-in" class="floating-action zoom-btn" aria-label="放大">+</button>
+        <button id="zoom-reset" class="floating-action zoom-btn" aria-label="重置">⟲</button>
+      </div>
+
+      <!-- 右上角操作按钮组 -->
+      <button id="fit-btn" class="floating-action floating-fit" aria-label="切换适应/充满">▣</button>
+      <button id="fs-btn" class="floating-action floating-fs" aria-label="全屏">⛶</button>
       <button id="diag-btn" class="floating-action floating-diag" aria-label="诊断信息">ⓘ</button>
       <button id="reconnect-btn" class="floating-action floating-reconnect hidden" aria-label="重连">↻</button>
       <button id="disconnect-btn" class="floating-action floating-close" aria-label="断开">×</button>

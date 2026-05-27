@@ -20,7 +20,9 @@ html, body {
   background: var(--bg);
   color: var(--text);
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;  /* 移动端禁止下拉刷新触发 */
 }
+body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
 
 #app {
   max-width: 480px;
@@ -131,12 +133,25 @@ html, body {
 
 .hidden { display: none !important; }
 
-/* 视频阶段：全屏覆盖，按钮浮在视频上 */
+/* 视频阶段：真·全屏覆盖（使用 dvh 适配移动端浏览器地址栏伸缩） */
 .video-stage {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;            /* 现代浏览器：dynamic viewport */
   background: black;
   z-index: 10;
+  overflow: hidden;
+  touch-action: none;        /* 我们用 JS 自己处理触摸手势 */
+}
+
+/* video 包在 canvas 里，方便做 transform 缩放/平移 */
+.video-canvas {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 #remote-video {
@@ -145,6 +160,7 @@ html, body {
   object-fit: contain;
   background: black;
   display: block;
+  pointer-events: none;      /* 让手势穿透到 canvas */
 }
 
 .floating-action {
@@ -180,6 +196,50 @@ html, body {
   font-weight: 700;
 }
 .floating-diag:hover { background: rgba(59, 130, 246, 0.75); }
+.floating-fs {
+  right: calc(env(safe-area-inset-right, 0px) + 180px);
+  font-size: 20px;
+}
+.floating-fs:hover { background: rgba(96, 165, 250, 0.75); }
+.floating-fit {
+  right: calc(env(safe-area-inset-right, 0px) + 236px);
+  font-size: 18px;
+}
+.floating-fit:hover { background: rgba(96, 165, 250, 0.75); }
+
+/* video 适应模式：contain（默认）/ cover（充满裁剪） */
+#remote-video.fit-cover { object-fit: cover; }
+#remote-video.fit-contain { object-fit: contain; }
+
+/* 缩放控制条（左下） */
+.zoom-bar {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 20;
+}
+.zoom-btn {
+  position: static;
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+}
+.zoom-label {
+  background: rgba(15, 23, 42, 0.65);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: monospace;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  min-width: 50px;
+  text-align: center;
+  pointer-events: none;
+}
 
 /* 诊断面板 */
 .diag-panel {
@@ -245,23 +305,26 @@ html, body {
 .diag-row.mode-relay .value { color: #f59e0b; }
 .diag-row.mode-failed .value { color: var(--danger); }
 
+/* stats 改为右下角小气泡，避开顶部状态栏和画面中央 */
 .floating-stats {
   position: absolute;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(15, 23, 42, 0.65);
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--text);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  right: calc(env(safe-area-inset-right, 0px) + 14px);
+  background: rgba(15, 23, 42, 0.55);
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  color: rgba(241, 245, 249, 0.85);
   font-family: monospace;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  z-index: 20;
+  z-index: 18;
   pointer-events: none;
   white-space: nowrap;
+  opacity: 0.55;
+  transition: opacity 0.2s;
 }
+.floating-stats:hover { opacity: 1; }
 .floating-stats:empty { display: none; }
 
 .overlay {

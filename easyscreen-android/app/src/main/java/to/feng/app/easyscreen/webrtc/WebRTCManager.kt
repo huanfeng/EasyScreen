@@ -2,8 +2,11 @@ package to.feng.app.easyscreen.webrtc
 
 import android.content.Context
 import android.content.Intent
+import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.util.Log
+import android.view.Display
+import android.view.Surface
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +69,16 @@ class WebRTCManager private constructor() {
     private var hostQualityMaxBitrateBps: Int = 2_000_000
     private var hostQualityMinBitrateBps: Int = 600_000
     private var hostQualityFps: Int = 20
+    // 用户选择的"基础尺寸"（不考虑方向），动态切换时按方向重新对调
+    private var hostBaseLong: Int = 1280
+    private var hostBaseShort: Int = 720
+    // 当前实际采集尺寸（防抖：旋转事件密集时跳过相同的值）
+    private var currentCapW: Int = 0
+    private var currentCapH: Int = 0
+
+    // 监听屏幕方向变化：旋转后调 changeCaptureFormat，无需重建 PC / 重申请 MediaProjection
+    private var displayManager: DisplayManager? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
 
     // Host 模式的多 Guest PC 管理（key=guestId）
     private val guestPCs = java.util.concurrent.ConcurrentHashMap<String, PeerConnection>()
@@ -333,8 +346,18 @@ class WebRTCManager private constructor() {
         videoSource = factory?.createVideoSource(true)
         videoCapturer?.initialize(surfaceTextureHelper, appContext!!, videoSource?.capturerObserver)
 
-        videoCapturer?.startCapture(width, height, fps)
-        Log.d(TAG, "Screen capture started (${width}x${height} @${fps}fps, bitrate ${minBitrateBps}-${maxBitrateBps})")
+        // 保存基础尺寸供方向切换重算
+        hostBaseLong = maxOf(width, height)
+        hostBaseShort = minOf(width, height)
+
+        // 按设备实际方向自动对调 W/H，避免横向画布塞竖向源造成大面积黑边
+        val (capW, capH) = computeCaptureSize()
+        currentCapW = capW; currentCapH = capH
+        videoCapturer?.startCapture(capW, capH, fps)
+        Log.d(TAG, "Screen capture started ${capW}x${capH} @${fps}fps, bitrate ${minBitrateBps}-${maxBitrateBps}")
+
+        // 注册 DisplayListener：旋转时动态 changeCaptureFormat
+        registerDisplayListener()
 
         // 创建本地 VideoTrack / AudioTrack —— 不在此处绑到任何 PC，留给 addGuestPeerConnection 时按 Guest 挂
         localVideoTrack = factory?.createVideoTrack("screen_track", videoSource)
@@ -396,6 +419,52 @@ class WebRTCManager private constructor() {
         }
 
         _captureReady.value = true
+    }
+
+    /** 根据当前屏幕方向算出"长边 vs 短边"应该填给 startCapture 的 W/H */
+    private fun computeCaptureSize(): Pair<Int, Int> {
+        val ctx = appContext ?: return hostBaseLong to hostBaseShort
+        val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
+        val rotation = display?.rotation ?: Surface.ROTATION_0
+        val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
+        return if (isPortrait) hostBaseShort to hostBaseLong  // 竖屏：短边为宽，长边为高
+               else hostBaseLong to hostBaseShort              // 横屏：长边为宽
+    }
+
+    private fun registerDisplayListener() {
+        if (displayListener != null) return
+        val ctx = appContext ?: return
+        val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
+        displayManager = dm
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) {}
+            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayChanged(displayId: Int) {
+                val (newW, newH) = computeCaptureSize()
+                if (newW == currentCapW && newH == currentCapH) return
+                Log.d(TAG, "Display rotated → changeCaptureFormat ${currentCapW}x${currentCapH} → ${newW}x${newH}")
+                try {
+                    videoCapturer?.changeCaptureFormat(newW, newH, hostQualityFps)
+                    currentCapW = newW; currentCapH = newH
+                } catch (e: Exception) {
+                    Log.e(TAG, "changeCaptureFormat failed", e)
+                }
+            }
+        }
+        try {
+            dm.registerDisplayListener(listener, null)
+            displayListener = listener
+            Log.d(TAG, "DisplayListener registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "registerDisplayListener failed", e)
+        }
+    }
+
+    private fun unregisterDisplayListener() {
+        val l = displayListener ?: return
+        try { displayManager?.unregisterDisplayListener(l) } catch (_: Exception) {}
+        displayListener = null
     }
 
     /** 给 sender 应用 Host 端码率上下限 */
@@ -729,6 +798,7 @@ class WebRTCManager private constructor() {
      */
     fun release() {
         try {
+            unregisterDisplayListener()
             // 关闭所有 Guest PC
             for ((_, pc) in guestPCs) {
                 try { pc.close() } catch (_: Exception) {}

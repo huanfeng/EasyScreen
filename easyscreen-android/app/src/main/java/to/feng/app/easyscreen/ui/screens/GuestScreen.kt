@@ -1,9 +1,14 @@
 package to.feng.app.easyscreen.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -63,6 +68,9 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
     init {
         webRTCManager.initialize(appContext, appContext)
         setupWebRTCCallbacks()
+        // 自动回填上次输入的连接码
+        val saved = GuestPrefs.getLastCode(appContext)
+        if (saved.length == 6) _inputCode.value = saved
     }
 
     private fun setupWebRTCCallbacks() {
@@ -148,6 +156,8 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
         }
         hasJoined = true
         _statusMessage.value = "正在连接..."
+        // 记下本次输入的连接码，下次自动回填
+        GuestPrefs.setLastCode(appContext, code)
         signalingClient.connect(serverUrl)
 
         viewModelScope.launch {
@@ -239,6 +249,20 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
         _isConnected.value = false
     }
 
+    /**
+     * "软退出"：仅断开当前观看会话，UI 回到输入码界面（保留上次的码）。
+     * 用于观看页"返回 → 确认"后跳回输入页（而非退出整个 Guest 路由）。
+     */
+    fun leaveSession() {
+        cleanupResources()
+        webRTCManager.release()
+        signalingClient.disconnect()
+        remoteVideoTrack = null
+        hasJoined = false
+        _isConnected.value = false
+        _statusMessage.value = ""
+    }
+
     override fun onCleared() {
         super.onCleared()
         disconnect()
@@ -280,199 +304,284 @@ fun GuestScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp)
-            .verticalScroll(scrollState),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // 返回按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start
+    if (!isConnected) {
+        // ========== 输入阶段 ==========
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TextButton(onClick = {
-                viewModel.disconnect()
-                onBack()
-            }) {
-                Text("< 返回")
+            // 顶部返回栏（与 Host 一致的紧凑布局）
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = {
+                    viewModel.disconnect()
+                    onBack()
+                }) { Text("< 返回") }
             }
-        }
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "输入6位连接码",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
 
-        if (!isConnected) {
-            // 输入界面
-            Text(
-                text = "输入6位连接码",
-                style = MaterialTheme.typography.headlineLarge
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            OutlinedTextField(
-                value = inputCode,
-                onValueChange = { viewModel.updateInputCode(it) },
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = LocalTextStyle.current.copy(
-                    textAlign = TextAlign.Center,
-                    fontSize = 36.sp,
-                    fontFamily = FontFamily.Monospace
-                ),
-                placeholder = {
-                    Text(
-                        text = "_ _ _ _ _ _",
+                OutlinedTextField(
+                    value = inputCode,
+                    onValueChange = { viewModel.updateInputCode(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = LocalTextStyle.current.copy(
                         textAlign = TextAlign.Center,
                         fontSize = 36.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number
-                ),
-                singleLine = true,
-                enabled = !isConnected
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = { viewModel.joinRoom() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                enabled = inputCode.length == 6 && connectionState != ConnectionState.CONNECTING && !isConnected
-            ) {
-                if (connectionState == ConnectionState.CONNECTING) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text(text = "开始连接", style = MaterialTheme.typography.titleLarge)
-                }
-            }
-
-            // 状态信息
-            if (statusMessage.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.size(12.dp),
-                        shape = MaterialTheme.shapes.extraSmall,
-                        color = when (connectionState) {
-                            ConnectionState.CONNECTED -> if (isConnected) ConnectedGreen else WaitingAmber
-                            ConnectionState.CONNECTING -> WaitingAmber
-                            ConnectionState.DISCONNECTED -> if (isConnected) ConnectedGreen else ErrorRed
-                        }
-                    ) {}
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = statusMessage,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            // 视频观看界面
-            Text(
-                text = "正在观看对方屏幕",
-                style = MaterialTheme.typography.headlineMedium,
-                color = ConnectedGreen
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 视频区域
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (remoteViewReady) {
-                        val renderer = viewModel.createRemoteView()
-                        if (renderer != null) {
-                            AndroidView(
-                                factory = { renderer },
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Text(
-                                text = "视频加载失败",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = ErrorRed
-                            )
-                        }
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                        letterSpacing = 6.sp,
+                    ),
+                    placeholder = {
+                        // 关键：用 Box 撑满 + 显式居中，否则 placeholder 文本会贴左
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = statusMessage.ifEmpty { "等待视频连接..." },
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "------",
+                                fontSize = 36.sp,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 6.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                             )
                         }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    enabled = !isConnected,
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = { viewModel.joinRoom() },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    enabled = inputCode.length == 6 && connectionState != ConnectionState.CONNECTING && !isConnected,
+                ) {
+                    if (connectionState == ConnectionState.CONNECTING) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text(text = "开始连接", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+
+                if (statusMessage.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(10.dp),
+                            shape = MaterialTheme.shapes.extraSmall,
+                            color = when (connectionState) {
+                                ConnectionState.CONNECTED -> if (isConnected) ConnectedGreen else WaitingAmber
+                                ConnectionState.CONNECTING -> WaitingAmber
+                                ConnectionState.DISCONNECTED -> if (isConnected) ConnectedGreen else ErrorRed
+                            },
+                        ) {}
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = statusMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
+        }
+    } else {
+        // ========== 全屏视频观看阶段 ==========
+        FullscreenVideoView(
+            remoteViewReady = remoteViewReady,
+            statusMessage = statusMessage,
+            createRenderer = { viewModel.createRemoteView() },
+            onLeaveToInput = { viewModel.leaveSession() },
+        )
+    }
+}
 
-            Spacer(modifier = Modifier.height(16.dp))
+@Composable
+private fun FullscreenVideoView(
+    remoteViewReady: Boolean,
+    statusMessage: String,
+    createRenderer: () -> org.webrtc.SurfaceViewRenderer?,
+    onLeaveToInput: () -> Unit,
+) {
+    // 缩放 / 平移状态
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val minScale = 1f
+    val maxScale = 6f
 
-            // 状态指示
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    modifier = Modifier.size(12.dp),
-                    shape = MaterialTheme.shapes.extraSmall,
-                    color = if (remoteViewReady) ConnectedGreen else WaitingAmber
-                ) {}
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (remoteViewReady) "视频连接正常" else "等待视频...",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+    // 返回二次确认
+    var showLeaveConfirm by remember { mutableStateOf(false) }
+    val askLeave: () -> Unit = { showLeaveConfirm = true }
+    androidx.activity.compose.BackHandler { askLeave() }
+    if (showLeaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLeaveConfirm = false },
+            title = { Text("停止观看？") },
+            text = { Text("将断开当前画面，回到输入连接码界面。") },
+            confirmButton = {
+                Button(onClick = {
+                    showLeaveConfirm = false
+                    onLeaveToInput()
+                }) { Text("停止观看") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showLeaveConfirm = false }) { Text("继续观看") }
+            }
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(androidx.compose.ui.graphics.Color.Black)
+            // 手势放在外层 Box 上，确保不被 SurfaceView 偷走
+            .pointerInput(Unit) {
+                detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
+                    val newScale = (scale * zoom).coerceIn(minScale, maxScale)
+                    if (newScale != scale) {
+                        val ratio = newScale / scale
+                        offset = androidx.compose.ui.geometry.Offset(
+                            x = centroid.x - (centroid.x - offset.x) * ratio,
+                            y = centroid.y - (centroid.y - offset.y) * ratio,
+                        )
+                        scale = newScale
+                    }
+                    if (scale > 1f) {
+                        offset = androidx.compose.ui.geometry.Offset(
+                            x = offset.x + pan.x,
+                            y = offset.y + pan.y,
+                        )
+                    }
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onDoubleTap = { tap ->
+                        if (scale > 1.01f) {
+                            scale = 1f
+                            offset = androidx.compose.ui.geometry.Offset.Zero
+                        } else {
+                            scale = 2f
+                            offset = androidx.compose.ui.geometry.Offset(
+                                x = tap.x * (1 - 2f),
+                                y = tap.y * (1 - 2f),
+                            )
+                        }
+                    },
+                )
+            },
+    ) {
+        if (remoteViewReady) {
+            val renderer = createRenderer()
+            if (renderer != null) {
+                AndroidView(
+                    factory = { renderer },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y,
+                        ),
                 )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 断开连接按钮
-            OutlinedButton(
-                onClick = {
-                    viewModel.disconnect()
-                    onBack()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = ErrorRed
-                )
+        } else {
+            // 加载中
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Text(text = "断开连接", style = MaterialTheme.typography.labelLarge)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = statusMessage.ifEmpty { "等待视频连接..." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = androidx.compose.ui.graphics.Color.White,
+                )
+            }
+        }
+
+        // 左上角浮动返回（半透明圆形按钮）—— 弹确认对话框
+        androidx.compose.material3.IconButton(
+            onClick = askLeave,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, top = 12.dp)
+                .size(44.dp)
+                .background(
+                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                ),
+        ) {
+            Text(
+                text = "<",
+                color = androidx.compose.ui.graphics.Color.White,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+
+        // 右下角缩放百分比 + 重置
+        if (scale > 1.01f) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 12.dp)
+                    .background(
+                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                        shape = MaterialTheme.shapes.small,
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${(scale * 100).toInt()}%",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        scale = 1f
+                        offset = androidx.compose.ui.geometry.Offset.Zero
+                    },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                    modifier = Modifier.height(24.dp),
+                ) {
+                    Text(
+                        "重置",
+                        color = androidx.compose.ui.graphics.Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
     }

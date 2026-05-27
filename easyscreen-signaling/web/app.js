@@ -47,6 +47,14 @@
   const diagPanel = $('diag-panel');
   const diagBody = $('diag-body');
   const statusEl = $('status');
+  const videoStage = $('video-view');
+  const videoCanvas = $('video-canvas');
+  const fsBtn = $('fs-btn');
+  const fitBtn = $('fit-btn');
+  const zoomIn = $('zoom-in');
+  const zoomOut = $('zoom-out');
+  const zoomReset = $('zoom-reset');
+  const zoomLabel = $('zoom-label');
   const joinView = $('join-view');
   const videoView = $('video-view');
   const video = $('remote-video');
@@ -616,4 +624,194 @@
       showReconnect(true);
     }
   });
+
+  // ===================== 缩放 + 平移 + 全屏 =====================
+  const ZOOM_MIN = 1.0;
+  const ZOOM_MAX = 6.0;
+  const ZOOM_STEP = 0.25;
+  const view = { scale: 1, tx: 0, ty: 0 };
+
+  function applyTransform() {
+    videoCanvas.style.transform =
+      `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`;
+    zoomLabel.textContent = `${Math.round(view.scale * 100)}%`;
+  }
+
+  // 在某一焦点处缩放（焦点屏幕坐标 → 保持该点在屏幕上的位置不变）
+  function zoomAt(newScale, focalX, focalY) {
+    newScale = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newScale));
+    if (newScale === view.scale) return;
+    const ratio = newScale / view.scale;
+    view.tx = focalX - (focalX - view.tx) * ratio;
+    view.ty = focalY - (focalY - view.ty) * ratio;
+    view.scale = newScale;
+    clampPan();
+    applyTransform();
+  }
+
+  // 限制平移范围：缩放后画面不能比舞台还小（避免拖出去）
+  function clampPan() {
+    const rect = videoStage.getBoundingClientRect();
+    const scaledW = rect.width * view.scale;
+    const scaledH = rect.height * view.scale;
+    if (scaledW <= rect.width) {
+      view.tx = (rect.width - scaledW) / 2;
+    } else {
+      const minTx = rect.width - scaledW;
+      view.tx = Math.max(minTx, Math.min(0, view.tx));
+    }
+    if (scaledH <= rect.height) {
+      view.ty = (rect.height - scaledH) / 2;
+    } else {
+      const minTy = rect.height - scaledH;
+      view.ty = Math.max(minTy, Math.min(0, view.ty));
+    }
+  }
+
+  function resetView() {
+    view.scale = 1; view.tx = 0; view.ty = 0;
+    applyTransform();
+  }
+
+  zoomIn.addEventListener('click', () => {
+    const r = videoStage.getBoundingClientRect();
+    zoomAt(view.scale + ZOOM_STEP, r.width / 2, r.height / 2);
+  });
+  zoomOut.addEventListener('click', () => {
+    const r = videoStage.getBoundingClientRect();
+    zoomAt(view.scale - ZOOM_STEP, r.width / 2, r.height / 2);
+  });
+  zoomReset.addEventListener('click', resetView);
+
+  // ---- 滚轮缩放（PC） ----
+  videoStage.addEventListener('wheel', (e) => {
+    if (videoStage.classList.contains('hidden')) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomAt(view.scale * factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // ---- 双击切换 100%/200% ----
+  let lastTap = 0;
+  videoStage.addEventListener('click', (e) => {
+    // 忽略浮动按钮点击
+    if (e.target.closest('.floating-action') || e.target.closest('.zoom-bar') ||
+        e.target.closest('.diag-panel') || e.target.closest('.floating-stats')) return;
+    const now = Date.now();
+    if (now - lastTap < 300) {
+      if (view.scale > 1.01) resetView();
+      else zoomAt(2.0, e.clientX, e.clientY);
+    }
+    lastTap = now;
+  });
+
+  // ---- 触摸/鼠标 平移 + 双指捏合 ----
+  const pointers = new Map();  // pointerId → { x, y }
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+  let pinchCenter = { x: 0, y: 0 };
+  let panStart = null;
+
+  videoCanvas.addEventListener('pointerdown', (e) => {
+    videoCanvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      panStart = { x: e.clientX, y: e.clientY, tx: view.tx, ty: view.ty };
+    } else if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      pinchStartDist = dist(pts[0], pts[1]);
+      pinchStartScale = view.scale;
+      pinchCenter = midpoint(pts[0], pts[1]);
+      panStart = null;
+    }
+  });
+
+  videoCanvas.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      const d = dist(pts[0], pts[1]);
+      if (pinchStartDist > 0) {
+        const newScale = pinchStartScale * (d / pinchStartDist);
+        zoomAt(newScale, pinchCenter.x, pinchCenter.y);
+      }
+    } else if (pointers.size === 1 && panStart && view.scale > 1) {
+      view.tx = panStart.tx + (e.clientX - panStart.x);
+      view.ty = panStart.ty + (e.clientY - panStart.y);
+      clampPan();
+      applyTransform();
+    }
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) {
+      pinchStartDist = 0;
+      const remaining = [...pointers.values()][0];
+      if (remaining) {
+        panStart = { x: remaining.x, y: remaining.y, tx: view.tx, ty: view.ty };
+      } else {
+        panStart = null;
+      }
+    }
+  }
+  videoCanvas.addEventListener('pointerup', endPointer);
+  videoCanvas.addEventListener('pointercancel', endPointer);
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function midpoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+
+  // ---- 适应 / 充满 切换（contain ↔ cover）----
+  // 移动端 / 触屏设备默认充满（手机源比例和手机视口接近，避免大面积黑边）；PC 默认适应
+  const defaultFit = window.matchMedia('(pointer:coarse)').matches ? 'cover' : 'contain';
+  let fitMode = localStorage.getItem('easyscreen.fitMode') || defaultFit;
+  applyFitMode();
+  function applyFitMode() {
+    video.classList.remove('fit-contain', 'fit-cover');
+    video.classList.add(fitMode === 'cover' ? 'fit-cover' : 'fit-contain');
+    fitBtn.textContent = fitMode === 'cover' ? '▣' : '▢';
+    fitBtn.title = fitMode === 'cover' ? '当前：充满（裁剪）' : '当前：适应（保留全部画面）';
+  }
+  fitBtn.addEventListener('click', () => {
+    fitMode = fitMode === 'cover' ? 'contain' : 'cover';
+    localStorage.setItem('easyscreen.fitMode', fitMode);
+    applyFitMode();
+  });
+
+  // ---- 全屏 ----
+  fsBtn.addEventListener('click', async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await videoStage.requestFullscreen({ navigationUI: 'hide' });
+        // 横屏锁定（仅移动端 + 支持的浏览器）
+        if (screen.orientation && screen.orientation.lock) {
+          try { await screen.orientation.lock('landscape'); } catch (_) {}
+        }
+      } else {
+        await document.exitFullscreen();
+        if (screen.orientation && screen.orientation.unlock) {
+          try { screen.orientation.unlock(); } catch (_) {}
+        }
+      }
+    } catch (err) {
+      console.warn('[fullscreen] failed', err);
+    }
+  });
+
+  // 进入视频阶段时重置 transform
+  new MutationObserver(() => {
+    if (!videoStage.classList.contains('hidden')) {
+      resetView();
+    }
+  }).observe(videoStage, { attributes: true, attributeFilter: ['class'] });
+
+  // 窗口尺寸变化（横竖屏切换）时重新校准平移边界
+  window.addEventListener('resize', () => {
+    clampPan();
+    applyTransform();
+  });
+
+  // 初始化一次
+  resetView();
 })();
