@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 import org.webrtc.SurfaceViewRenderer
 
 class GuestViewModel(private val serverUrl: String, private val appContext: android.content.Context) : ViewModel() {
-    private val signalingClient = SignalingClient()
+    private val signalingClient = SignalingClient(context = appContext)
     private val gson = Gson()
     private val webRTCManager = WebRTCManager.getInstance()
 
@@ -56,23 +56,25 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
     val remoteViewReady: StateFlow<Boolean> = _remoteViewReady.asStateFlow()
 
     var surfaceViewRenderer: SurfaceViewRenderer? = null
+    private var remoteVideoTrack: org.webrtc.VideoTrack? = null
 
     private var hasJoined = false
 
     init {
-        // 初始化 WebRTC
-        webRTCManager.initialize(
-            appContext,
-            appContext
-        )
-
+        webRTCManager.initialize(appContext, appContext)
         setupWebRTCCallbacks()
     }
 
     private fun setupWebRTCCallbacks() {
+        // Guest 既会 createOffer 也会接 Answer 后做 setRemote；onLocalDescription
+        // 只在 createOffer 路径触发，应当按 SDP 类型派发
         webRTCManager.onLocalDescription = { sdp ->
             val payload = SdpPayload(sdp.description, sdp.type.canonicalForm())
-            signalingClient.sendAnswer(payload)
+            if (sdp.type == org.webrtc.SessionDescription.Type.OFFER) {
+                signalingClient.sendOffer(payload)
+            } else {
+                signalingClient.sendAnswer(payload)
+            }
         }
 
         webRTCManager.onLocalCandidate = { candidate ->
@@ -82,13 +84,28 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
             )
         }
 
+        // 关键：远端视频 track 到达 → 挂到 renderer 并切到"视频就绪"状态
+        webRTCManager.onVideoTrack = { track ->
+            android.util.Log.d("GuestVM", "onVideoTrack: $track")
+            if (track != null) {
+                remoteVideoTrack = track
+                // renderer 可能 UI 端还没创建，先记下 track；UI 端 createRemoteView() 时再 addSink
+                surfaceViewRenderer?.let { rdr ->
+                    try { track.addSink(rdr) } catch (_: Exception) {}
+                }
+                _remoteViewReady.value = true
+            } else {
+                _remoteViewReady.value = false
+            }
+        }
+
         webRTCManager.onIceConnectionChange = { state ->
             when (state) {
                 org.webrtc.PeerConnection.IceConnectionState.CONNECTED -> {
                     _statusMessage.value = "已连接，视频通话中"
                 }
                 org.webrtc.PeerConnection.IceConnectionState.DISCONNECTED -> {
-                    _statusMessage.value = "连接已断开"
+                    _statusMessage.value = "连接不稳定…"
                 }
                 org.webrtc.PeerConnection.IceConnectionState.FAILED -> {
                     _statusMessage.value = "连接失败，请重试"
@@ -98,15 +115,24 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
             }
         }
 
-        // 监听断开连接
         webRTCManager.onDisconnected = {
             _statusMessage.value = "对方已断开连接"
             _remoteViewReady.value = false
         }
     }
 
+    /**
+     * UI 调用以创建/取出 renderer。如果 track 已经到了，立即挂上去。
+     */
     fun createRemoteView(): SurfaceViewRenderer? {
-        surfaceViewRenderer = webRTCManager.createSurfaceViewRenderer()
+        if (surfaceViewRenderer == null) {
+            surfaceViewRenderer = webRTCManager.createSurfaceViewRenderer()
+        }
+        remoteVideoTrack?.let { track ->
+            surfaceViewRenderer?.let { rdr ->
+                try { track.addSink(rdr) } catch (_: Exception) {}
+            }
+        }
         return surfaceViewRenderer
     }
 

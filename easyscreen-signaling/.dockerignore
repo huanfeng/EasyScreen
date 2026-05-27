@@ -1,0 +1,6 @@
+deploy/
+*.exe
+*.tar.gz
+.git/
+.gitignore
+README.md

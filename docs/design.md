@@ -58,6 +58,29 @@
 4. 打洞配置：在创建 `PeerConnection` 时，硬编码填入一组测试用的公共 STUN 服务器（如 `stun.l.google.com:19302`），以保证局域网外也能尽量打通。
 5. 渲染：将控制端收到的 `VideoTrack` 绑定到 Compose 页面中的 `SurfaceViewRenderer` 上。
 
+## Phase 3.5: Web 端预览客户端（联调利器）
+**任务：** 提供一个浏览器即开即用的控制端实现，免去再装一台 Android 即可验证 Host 全链路。
+
+**架构：**
+- Web 资源直接由 Go 信令服务托管在 `/`（静态目录 `easyscreen-signaling/web/`）。
+- 浏览器扮演 Guest 角色，使用与 Android Guest 完全一致的信令协议（join → offer → answer ↔ candidate）。
+- 纯接收方：`addTransceiver('video'/'audio', recvonly)`，不调用 `addTrack`。
+
+**字段约定（双端必须一致）：**
+- SDP 载荷：`payload: { sdp: string, type: 'offer'|'answer' }`
+- ICE 载荷：`payload: { candidate, sdpMid, sdpMLineIndex }` —— camelCase，与 Android 端 `IceCandidatePayload` 完全对齐。
+
+**联调注意（Phase 3 实现中已修正的协议错误）：**
+1. Host 收到 Guest 的 Offer 时，必须**先 createPeerConnection 再 setRemoteDescription**，否则 SDP 设置无效。
+2. Host 是应答方，授权完成挂载轨道后必须 `createAnswer()` 并通过 `sendAnswer` 回发，而不是再创建一个 Offer。
+3. Guest 的 `createOffer` 需要 `OfferToReceiveAudio/Video = true`，否则协商出的 SDP 不会带 `m=video/audio`，对端无法发送。
+
+**TURN 配置：**
+- Web 端：URL 参数 `?turn=turn:user:pass@host:3478` 或页面"高级设置"输入框。
+- Android 端：当前为 STUN-only，公网穿透失败时需补 TURN（Phase 4 工作项）。
+
+---
+
 ## Phase 4: 联调与保活优化
 **任务：** 完善连接稳定性与错误处理。
 **需求细节：**

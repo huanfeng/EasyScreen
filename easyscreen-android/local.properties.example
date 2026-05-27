@@ -1,0 +1,9 @@
+# 拷贝到 local.properties（已被 .gitignore，不会进入仓库）
+# 或者通过环境变量 EASYSCREEN_DEFAULT_SERVER_URL 提供，构建时优先环境变量
+
+# Android SDK 路径（Android Studio 会自动写入）
+# sdk.dir=D:\\Develop\\SDK\\AndroidSdk
+
+# 默认信令服务器 WebSocket 地址
+# 例如：wss://your.domain/ws  或者  ws://192.168.1.10:8081/ws
+easyscreen.defaultServerUrl=ws://example.com:8081/ws

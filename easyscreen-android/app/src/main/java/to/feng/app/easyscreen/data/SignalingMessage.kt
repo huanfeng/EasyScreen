@@ -18,13 +18,24 @@ data class MessageData(
 
 data class SdpPayload(
     @SerializedName("sdp") val sdp: String = "",
-    @SerializedName("type") val type: String = ""
+    @SerializedName("type") val type: String = "",
+    @SerializedName("guest_id") val guestId: String = "",
 )
 
 data class IceCandidatePayload(
     @SerializedName("candidate") val candidate: String = "",
     @SerializedName("sdpMid") val sdpMid: String = "",
-    @SerializedName("sdpMLineIndex") val sdpMLineIndex: Int = 0
+    @SerializedName("sdpMLineIndex") val sdpMLineIndex: Int = 0,
+    @SerializedName("guest_id") val guestId: String = "",
+)
+
+data class RegisterPayload(
+    @SerializedName("token") val token: String = "",
+    @SerializedName("max_guests") val maxGuests: Int = 5,
+)
+
+data class GuestEventPayload(
+    @SerializedName("guest_id") val guestId: String = "",
 )
 
 object MessageType {
@@ -38,4 +49,7 @@ object MessageType {
     const val DISCONNECT = "disconnect"
     const val PING = "ping"
     const val PONG = "pong"
+    const val GUEST_JOIN = "guest_join"
+    const val GUEST_LEAVE = "guest_leave"
+    const val KICK_GUEST = "kick_guest"
 }

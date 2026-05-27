@@ -1,0 +1,29 @@
+# 把 your.domain 替换为你的域名（先做 A 记录指向 VPS）
+# Caddy 会自动申请 / 续签 Let's Encrypt 证书
+
+your.domain {
+    # 反代到本地 Go 服务（WebSocket 自动处理 Upgrade）
+    reverse_proxy localhost:8081 {
+        # WebSocket 长连接：拉长读超时
+        transport http {
+            read_timeout 24h
+            response_header_timeout 5m
+        }
+    }
+
+    # 安全 / 性能头
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # 访问日志（可选）
+    log {
+        output file /var/log/caddy/easyscreen.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+}

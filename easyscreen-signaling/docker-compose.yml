@@ -1,0 +1,19 @@
+services:
+  easyscreen-signaling:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: easyscreen-signaling:latest
+    container_name: easyscreen-signaling
+    restart: unless-stopped
+    # 仅绑定到 loopback：反代（1Panel OpenResty / Nginx / Caddy）负责对外暴露
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      EASYSCREEN_ADDR: ":8081"
+      TZ: Asia/Shanghai
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

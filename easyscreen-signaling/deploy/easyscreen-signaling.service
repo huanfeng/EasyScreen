@@ -1,0 +1,35 @@
+[Unit]
+Description=EasyScreen Signaling Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=easyscreen
+Group=easyscreen
+WorkingDirectory=/opt/easyscreen
+ExecStart=/opt/easyscreen/easyscreen-signaling
+Restart=on-failure
+RestartSec=5s
+
+# 反向代理终结 TLS，所以只监听 localhost；如不用反向代理改成 ":8081"
+Environment=EASYSCREEN_ADDR=127.0.0.1:8081
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/easyscreen
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

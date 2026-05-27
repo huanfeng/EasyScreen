@@ -3,6 +3,25 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+import java.util.Properties
+
+// 默认信令服务器地址：从环境变量 EASYSCREEN_DEFAULT_SERVER_URL 或
+// 本地 local.properties 的 easyscreen.defaultServerUrl 读取，不进入仓库
+fun loadDefaultServerUrl(): String {
+    val env = System.getenv("EASYSCREEN_DEFAULT_SERVER_URL")
+    if (!env.isNullOrBlank()) return env
+    val f = rootProject.file("local.properties")
+    if (f.exists()) {
+        val props = Properties()
+        f.inputStream().use { props.load(it) }
+        val v = props.getProperty("easyscreen.defaultServerUrl")
+        if (!v.isNullOrBlank()) return v
+    }
+    // 占位符——首次使用必须由用户在设置里填入实际地址
+    return "ws://example.com:8081/ws"
+}
+val defaultServerUrl: String = loadDefaultServerUrl()
+
 android {
     namespace = "to.feng.app.easyscreen"
     compileSdk = 34
@@ -11,8 +30,10 @@ android {
         applicationId = "to.feng.app.easyscreen"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
+
+        buildConfigField("String", "DEFAULT_SERVER_URL", "\"$defaultServerUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -38,6 +59,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"

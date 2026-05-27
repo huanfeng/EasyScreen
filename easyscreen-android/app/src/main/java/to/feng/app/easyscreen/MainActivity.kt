@@ -1,4 +1,4 @@
-package to.feng.app.easyscreen.ui
+package to.feng.app.easyscreen
 
 import android.net.Uri
 import android.os.Bundle
@@ -24,6 +24,7 @@ import androidx.navigation.navArgument
 import to.feng.app.easyscreen.ui.screens.GuestScreen
 import to.feng.app.easyscreen.ui.screens.HostScreen
 import to.feng.app.easyscreen.ui.screens.MainScreen
+import to.feng.app.easyscreen.ui.screens.SettingsScreen
 import to.feng.app.easyscreen.ui.theme.EasyScreenTheme
 
 class MainActivity : ComponentActivity() {
@@ -60,8 +61,15 @@ fun EasyScreenApp() {
                 },
                 onNavigateToGuest = { serverUrl ->
                     navController.navigate("guest/${Uri.encode(serverUrl)}")
+                },
+                onNavigateToSettings = {
+                    navController.navigate("settings")
                 }
             )
+        }
+
+        composable("settings") {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(
