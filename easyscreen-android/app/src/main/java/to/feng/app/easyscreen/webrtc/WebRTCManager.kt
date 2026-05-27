@@ -105,6 +105,16 @@ class WebRTCManager private constructor() {
     private val _captureReady = MutableStateFlow(false)
     val captureReady: StateFlow<Boolean> = _captureReady.asStateFlow()
 
+    // Guest 端的远端 source 视频帧尺寸（包含 rotation），UI 用来判断要不要把画面旋转 90°
+    data class SourceSize(val width: Int, val height: Int, val rotation: Int) {
+        /** 经过 rotation 修正后画面在屏幕上呈现的有效宽高 */
+        fun effectiveSize(): Pair<Int, Int> =
+            if (rotation == 90 || rotation == 270) height to width else width to height
+        val isLandscape: Boolean get() = effectiveSize().let { it.first > it.second }
+    }
+    private val _sourceVideoSize = MutableStateFlow(SourceSize(0, 0, 0))
+    val sourceVideoSize: StateFlow<SourceSize> = _sourceVideoSize.asStateFlow()
+
     // MediaProjection 被外部停止（系统息屏 / 用户在通知栏停止）—— ViewModel 监听并发起重新授权
     private val _mediaProjectionStopped = MutableStateFlow(0)  // 自增计数器，每次 +1 触发一次
     val mediaProjectionStopped: StateFlow<Int> = _mediaProjectionStopped.asStateFlow()
@@ -176,8 +186,21 @@ class WebRTCManager private constructor() {
             Log.e(TAG, "EglBase not initialized, call initialize() first")
             return null
         }
+        // 重置 source 尺寸 —— 上一会话残留可能误导 UI 旋转判断
+        _sourceVideoSize.value = SourceSize(0, 0, 0)
         surfaceViewRenderer = SurfaceViewRenderer(appContext!!)
-        surfaceViewRenderer?.init(eglBase?.eglBaseContext, null)
+        // 通过 RendererEvents 把帧分辨率/方向变化暴露给 ViewModel
+        val rendererEvents = object : RendererCommon.RendererEvents {
+            override fun onFirstFrameRendered() {
+                Log.d(TAG, "renderer: first frame rendered")
+            }
+            override fun onFrameResolutionChanged(w: Int, h: Int, rotation: Int) {
+                Log.d(TAG, "renderer: frame ${w}x${h} rot=$rotation")
+                _sourceVideoSize.value = SourceSize(w, h, rotation)
+            }
+        }
+        surfaceViewRenderer?.init(eglBase?.eglBaseContext, rendererEvents)
+        surfaceViewRenderer?.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
         surfaceViewRenderer?.setMirror(false)
         surfaceViewRenderer?.setEnableHardwareScaler(true)
         return surfaceViewRenderer

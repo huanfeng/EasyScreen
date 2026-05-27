@@ -538,8 +538,19 @@ func (c *Client) cleanup() {
 					})
 				}
 			} else if c.role == "guest" {
-				delete(room.Guests, c.guestID)
+				// 同一个 client 可能因为协议异常多次 join 造成 Guests 里有多个 key 指向自己
+				// 这里按 client 引用清掉所有残留 key（防止"踢人后数量不减"的现象）
+				toDelete := make([]string, 0, 2)
+				for gid, g := range room.Guests {
+					if g == c {
+						toDelete = append(toDelete, gid)
+					}
+				}
+				for _, gid := range toDelete {
+					delete(room.Guests, gid)
+				}
 				if room.Host != nil {
+					// 只通知 Host 该 client 当前的 guestID（即客户端自己知道的那个）
 					room.Host.sendJSON(WSMessage{
 						Type:    TypeGuestLeave,
 						RoomID:  c.roomID,

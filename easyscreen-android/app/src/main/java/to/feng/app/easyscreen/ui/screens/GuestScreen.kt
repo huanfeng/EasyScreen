@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +61,9 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
     private val _remoteViewReady = MutableStateFlow(false)
     val remoteViewReady: StateFlow<Boolean> = _remoteViewReady.asStateFlow()
 
+    /** 远端源画面尺寸 + 旋转角度，UI 用来决定是否要 90° 旋转视频容器 */
+    val sourceVideoSize: StateFlow<WebRTCManager.SourceSize> = webRTCManager.sourceVideoSize
+
     var surfaceViewRenderer: SurfaceViewRenderer? = null
     private var remoteVideoTrack: org.webrtc.VideoTrack? = null
 
@@ -71,6 +75,27 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
         // 自动回填上次输入的连接码
         val saved = GuestPrefs.getLastCode(appContext)
         if (saved.length == 6) _inputCode.value = saved
+
+        // 关键：信令状态/消息的 collector 只跑一次，避免多次点击"开始连接"造成重复 join
+        viewModelScope.launch {
+            signalingClient.connectionState.collect { state ->
+                _connectionState.value = state
+                when (state) {
+                    ConnectionState.CONNECTED -> {
+                        if (hasJoined) signalingClient.join(_inputCode.value)
+                    }
+                    ConnectionState.CONNECTING -> {}
+                    ConnectionState.DISCONNECTED -> {
+                        if (_isConnected.value) _statusMessage.value = "连接已断开"
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            signalingClient.messages.collect { message ->
+                handleSignalingMessage(message)
+            }
+        }
     }
 
     private fun setupWebRTCCallbacks() {
@@ -154,36 +179,17 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
             _statusMessage.value = "请输入6位连接码"
             return
         }
+        if (hasJoined) {
+            // 已经在尝试中，避免重复 join；如 WS 已连上，会立刻发送 join
+            if (_connectionState.value == ConnectionState.CONNECTED) {
+                signalingClient.join(code)
+            }
+            return
+        }
         hasJoined = true
         _statusMessage.value = "正在连接..."
-        // 记下本次输入的连接码，下次自动回填
         GuestPrefs.setLastCode(appContext, code)
         signalingClient.connect(serverUrl)
-
-        viewModelScope.launch {
-            signalingClient.connectionState.collect { state ->
-                _connectionState.value = state
-                when (state) {
-                    ConnectionState.CONNECTED -> {
-                        signalingClient.join(_inputCode.value)
-                    }
-                    ConnectionState.CONNECTING -> {
-                        // 等待中
-                    }
-                    ConnectionState.DISCONNECTED -> {
-                        if (_isConnected.value) {
-                            _statusMessage.value = "连接已断开"
-                        }
-                    }
-                }
-            }
-        }
-
-        viewModelScope.launch {
-            signalingClient.messages.collect { message ->
-                handleSignalingMessage(message)
-            }
-        }
     }
 
     private fun handleSignalingMessage(message: SignalingMessage) {
@@ -239,6 +245,8 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
     private fun cleanupResources() {
         _remoteViewReady.value = false
         webRTCManager.releaseRenderer()
+        // 关键：清掉 ViewModel 本地对 renderer 的引用，避免下一次 createRemoteView 复用已 release 的对象
+        surfaceViewRenderer = null
     }
 
     fun disconnect() {
@@ -261,6 +269,9 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
         hasJoined = false
         _isConnected.value = false
         _statusMessage.value = ""
+        // release() 把 WebRTCManager 单例的所有回调清空了，这里重新装回去
+        // 否则下次 joinRoom 时本地 SDP / candidate 不会发往服务端 → 永远卡在"建立视频连接"
+        setupWebRTCCallbacks()
     }
 
     override fun onCleared() {
@@ -411,10 +422,12 @@ fun GuestScreen(
         }
     } else {
         // ========== 全屏视频观看阶段 ==========
+        val sourceSize by viewModel.sourceVideoSize.collectAsState()
         FullscreenVideoView(
             remoteViewReady = remoteViewReady,
             statusMessage = statusMessage,
             createRenderer = { viewModel.createRemoteView() },
+            sourceSize = sourceSize,
             onLeaveToInput = { viewModel.leaveSession() },
         )
     }
@@ -425,13 +438,107 @@ private fun FullscreenVideoView(
     remoteViewReady: Boolean,
     statusMessage: String,
     createRenderer: () -> org.webrtc.SurfaceViewRenderer?,
+    sourceSize: WebRTCManager.SourceSize,
     onLeaveToInput: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+
     // 缩放 / 平移状态
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    var stageSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     val minScale = 1f
     val maxScale = 6f
+
+    // 缩放后保持画面在 viewport 内的边界裁剪
+    fun clampOffset(s: Float, o: androidx.compose.ui.geometry.Offset): androidx.compose.ui.geometry.Offset {
+        if (stageSize.width <= 0 || stageSize.height <= 0) return o
+        val w = stageSize.width.toFloat()
+        val h = stageSize.height.toFloat()
+        // 当 scale=1 时，offset 应为 0（画面铺满）；scale>1 时，允许在四周边界内拖
+        val maxX = (w * (s - 1f) / 2f).coerceAtLeast(0f)
+        val maxY = (h * (s - 1f) / 2f).coerceAtLeast(0f)
+        return androidx.compose.ui.geometry.Offset(
+            x = o.x.coerceIn(-maxX, maxX),
+            y = o.y.coerceIn(-maxY, maxY),
+        )
+    }
+    fun resetView() {
+        scale = 1f
+        offset = androidx.compose.ui.geometry.Offset.Zero
+    }
+
+    // ① 全屏：隐藏状态栏/导航栏；点击屏幕切换显示
+    var systemBarsVisible by remember { mutableStateOf(false) }
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val view = window?.decorView
+        if (window != null && view != null) {
+            val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
+            // 进入观看页：隐藏系统栏
+            controller.systemBarsBehavior =
+                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            // 离开时恢复
+            if (window != null && view != null) {
+                val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+    // 当 systemBarsVisible 切换时同步系统栏
+    LaunchedEffect(systemBarsVisible) {
+        val window = activity?.window ?: return@LaunchedEffect
+        val view = window.decorView
+        val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
+        if (systemBarsVisible) controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        else controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+    }
+
+    // ② 共享中保持屏幕常亮
+    DisposableEffect(Unit) {
+        val window = activity?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // 源方向变化时把缩放/平移重置，避免画面被裁切到屏幕外
+    val srcEff = sourceSize.effectiveSize()
+    val srcLandscape = srcEff.first > 0 && srcEff.first > srcEff.second
+    LaunchedEffect(srcLandscape) {
+        scale = 1f
+        offset = androidx.compose.ui.geometry.Offset.Zero
+    }
+
+    // 让 Activity 跟随源画面方向旋转（仅在方向真正变化时触发，避免同方向不同分辨率时多次设置）
+    val sourceOrientationKey: Int = run {
+        val eff = sourceSize.effectiveSize()
+        when {
+            eff.first == 0 || eff.second == 0 -> 0   // 未知
+            eff.first > eff.second -> 1              // 横向
+            else -> 2                                // 竖向
+        }
+    }
+    LaunchedEffect(sourceOrientationKey) {
+        if (sourceOrientationKey == 0) return@LaunchedEffect
+        val act = activity ?: return@LaunchedEffect
+        act.requestedOrientation = if (sourceOrientationKey == 1) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
+    // 离开观看页时恢复未锁定方向
+    DisposableEffect(Unit) {
+        onDispose {
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     // 返回二次确认
     var showLeaveConfirm by remember { mutableStateOf(false) }
@@ -458,38 +565,51 @@ private fun FullscreenVideoView(
         modifier = Modifier
             .fillMaxSize()
             .background(androidx.compose.ui.graphics.Color.Black)
+            .onSizeChanged { stageSize = it }
             // 手势放在外层 Box 上，确保不被 SurfaceView 偷走
             .pointerInput(Unit) {
                 detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
                     val newScale = (scale * zoom).coerceIn(minScale, maxScale)
+                    var newOffset = offset
                     if (newScale != scale) {
+                        // 以 centroid 为焦点缩放：让该点在屏幕坐标系保持不变
                         val ratio = newScale / scale
-                        offset = androidx.compose.ui.geometry.Offset(
+                        newOffset = androidx.compose.ui.geometry.Offset(
                             x = centroid.x - (centroid.x - offset.x) * ratio,
                             y = centroid.y - (centroid.y - offset.y) * ratio,
                         )
                         scale = newScale
                     }
                     if (scale > 1f) {
-                        offset = androidx.compose.ui.geometry.Offset(
-                            x = offset.x + pan.x,
-                            y = offset.y + pan.y,
+                        newOffset = androidx.compose.ui.geometry.Offset(
+                            x = newOffset.x + pan.x,
+                            y = newOffset.y + pan.y,
                         )
                     }
+                    offset = clampOffset(scale, newOffset)
+                    // scale=1 强制 offset 归零（避免缩到底后画面漂出去）
+                    if (scale <= 1.001f) offset = androidx.compose.ui.geometry.Offset.Zero
                 }
             }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onTap = {
+                        // 单击切换系统栏显示
+                        systemBarsVisible = !systemBarsVisible
+                    },
                     onDoubleTap = { tap ->
                         if (scale > 1.01f) {
-                            scale = 1f
-                            offset = androidx.compose.ui.geometry.Offset.Zero
+                            resetView()
                         } else {
-                            scale = 2f
-                            offset = androidx.compose.ui.geometry.Offset(
-                                x = tap.x * (1 - 2f),
-                                y = tap.y * (1 - 2f),
+                            // 以双击点为焦点放大到 2x
+                            val newScale = 2f
+                            val ratio = newScale / scale
+                            val newOffset = androidx.compose.ui.geometry.Offset(
+                                x = tap.x - (tap.x - offset.x) * ratio,
+                                y = tap.y - (tap.y - offset.y) * ratio,
                             )
+                            scale = newScale
+                            offset = clampOffset(scale, newOffset)
                         }
                     },
                 )
@@ -530,23 +650,29 @@ private fun FullscreenVideoView(
             }
         }
 
-        // 左上角浮动返回（半透明圆形按钮）—— 弹确认对话框
-        androidx.compose.material3.IconButton(
-            onClick = askLeave,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 12.dp, top = 12.dp)
-                .size(44.dp)
-                .background(
-                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
-                    shape = androidx.compose.foundation.shape.CircleShape,
-                ),
+        // 左上 / 右下控件仅在系统栏可见（用户点击屏幕后）时显示
+        androidx.compose.animation.AnimatedVisibility(
+            visible = systemBarsVisible,
+            modifier = Modifier.align(Alignment.TopStart),
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
         ) {
-            Text(
-                text = "<",
-                color = androidx.compose.ui.graphics.Color.White,
-                style = MaterialTheme.typography.titleLarge,
-            )
+            androidx.compose.material3.IconButton(
+                onClick = askLeave,
+                modifier = Modifier
+                    .padding(start = 12.dp, top = 12.dp)
+                    .size(44.dp)
+                    .background(
+                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    ),
+            ) {
+                Text(
+                    text = "<",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            }
         }
 
         // 右下角缩放百分比 + 重置
@@ -569,10 +695,7 @@ private fun FullscreenVideoView(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(
-                    onClick = {
-                        scale = 1f
-                        offset = androidx.compose.ui.geometry.Offset.Zero
-                    },
+                    onClick = { resetView() },
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                     modifier = Modifier.height(24.dp),
                 ) {

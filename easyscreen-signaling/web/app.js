@@ -40,6 +40,7 @@
   const $ = (id) => document.getElementById(id);
   const codeInput = $('code');
   const connectBtn = $('connect-btn');
+  const refreshBtn = $('refresh-btn');
   const disconnectBtn = $('disconnect-btn');
   const reconnectBtn = $('reconnect-btn');
   const diagBtn = $('diag-btn');
@@ -51,6 +52,7 @@
   const videoCanvas = $('video-canvas');
   const fsBtn = $('fs-btn');
   const fitBtn = $('fit-btn');
+  const backHomeBtn = $('back-home-btn');
   const zoomIn = $('zoom-in');
   const zoomOut = $('zoom-out');
   const zoomReset = $('zoom-reset');
@@ -110,6 +112,7 @@
   codeInput.addEventListener('input', () => {
     codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
     connectBtn.disabled = codeInput.value.length !== 6;
+    refreshBtn.classList.add('hidden');  // 用户改输入后隐藏 refresh
   });
 
   codeInput.addEventListener('keydown', (e) => {
@@ -117,6 +120,13 @@
   });
 
   connectBtn.addEventListener('click', () => start(codeInput.value));
+  refreshBtn.addEventListener('click', () => {
+    // 重置 UI 并重试
+    refreshBtn.classList.add('hidden');
+    connectBtn.disabled = codeInput.value.length !== 6;
+    setStatus('准备重试…');
+    if (codeInput.value.length === 6) start(codeInput.value);
+  });
   disconnectBtn.addEventListener('click', () => teardown('user'));
   reconnectBtn.addEventListener('click', () => {
     const code = currentRoomId || codeInput.value || localStorage.getItem(LS_KEY_LAST_CODE);
@@ -128,7 +138,11 @@
 
   function showReconnect(show) {
     reconnectBtn.classList.toggle('hidden', !show);
+    // 处于"无法连接"或"对方已离线"状态时，同时显示返回主页按钮
+    backHomeBtn.classList.toggle('hidden', !show);
   }
+
+  backHomeBtn.addEventListener('click', () => teardown('user'));
 
   // ---------- 诊断面板 ----------
   diagBtn.addEventListener('click', () => {
@@ -295,8 +309,22 @@
       case MSG.ERROR: {
         const m = (msg.data && msg.data.message) || '未知错误';
         console.warn('[server-error]', m);
+
+        // 房间已满 / 房间不存在 / 房主拒绝 等"入场前"错误：用户还在输入界面，提供 refresh 按钮
+        const isPreJoin = /房间已满|房间不存在或已过期|房间暂无被控端|已被房主断开/.test(m);
+        if (isPreJoin) {
+          setStatus(m + '，可点 ↻ 重试', 'warning');
+          // 触发自动 teardown 以便重新连接
+          teardownInternal();
+          // 显示输入界面上的 refresh 按钮
+          if (!videoStage.classList.contains('hidden')) switchToJoin();
+          connectBtn.disabled = true;
+          refreshBtn.classList.remove('hidden');
+          break;
+        }
+
         // 对端缺席类错误：不 teardown，保留 video 视图 + 重连按钮
-        if (/对端未连接|房间不存在|已过期|被控端已断开/.test(m)) {
+        if (/对端未连接|被控端已断开/.test(m)) {
           setStatus('对方已离线：' + m + '，点 ↻ 重试', 'warning');
           setOverlay('对方已离线，等待重新上线', true);
           showReconnect(true);
