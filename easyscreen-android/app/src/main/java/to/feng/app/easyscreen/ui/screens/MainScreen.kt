@@ -61,13 +61,13 @@ fun MainScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text = "EasyScreen",
+                text = "远程看屏",
                 style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "极简远程看屏",
+                text = "极简 · 一键看屏",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
