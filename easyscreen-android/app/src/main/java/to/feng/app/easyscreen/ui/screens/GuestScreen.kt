@@ -1,5 +1,8 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package to.feng.app.easyscreen.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -7,9 +10,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -316,9 +323,11 @@ fun GuestScreen(
     }
 
     if (!isConnected) {
-        // ========== 输入阶段 ==========
+        // ========== 输入阶段：正常应用 safeDrawing inset ==========
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // 顶部返回栏（与 Host 一致的紧凑布局）
@@ -348,10 +357,13 @@ fun GuestScreen(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
 
+                val focusRequester = remember { FocusRequester() }
+                val keyboardController = LocalSoftwareKeyboardController.current
+
                 OutlinedTextField(
                     value = inputCode,
                     onValueChange = { viewModel.updateInputCode(it) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                     textStyle = LocalTextStyle.current.copy(
                         textAlign = TextAlign.Center,
                         fontSize = 36.sp,
@@ -359,7 +371,6 @@ fun GuestScreen(
                         letterSpacing = 6.sp,
                     ),
                     placeholder = {
-                        // 关键：用 Box 撑满 + 显式居中，否则 placeholder 文本会贴左
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.Center,
@@ -373,6 +384,24 @@ fun GuestScreen(
                             )
                         }
                     },
+                    trailingIcon = if (inputCode.isNotEmpty()) {
+                        {
+                            IconButton(
+                                onClick = {
+                                    viewModel.updateInputCode("")
+                                    focusRequester.requestFocus()
+                                    keyboardController?.show()
+                                },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Text(
+                                    text = "×",
+                                    fontSize = 22.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     enabled = !isConnected,
@@ -444,6 +473,13 @@ private fun FullscreenVideoView(
     val context = LocalContext.current
     val activity = context as? android.app.Activity
 
+    // contain / cover 切换（持久化）
+    var fillMode by remember { mutableStateOf(GuestPrefs.getFillMode(context)) }
+    LaunchedEffect(fillMode) {
+        GuestPrefs.setFillMode(context, fillMode)
+        WebRTCManager.getInstance().setRendererFillMode(fillMode)
+    }
+
     // 缩放 / 平移状态
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
@@ -469,33 +505,64 @@ private fun FullscreenVideoView(
         offset = androidx.compose.ui.geometry.Offset.Zero
     }
 
-    // ① 全屏：隐藏状态栏/导航栏；点击屏幕切换显示
+    // ① 全屏：使用 IMMERSIVE_STICKY 模式（MIUI 上 transient-bar 行为不稳定）
+    // 同时设置 decorFitsSystemWindows=false 让内容真正延伸到系统栏下方
     var systemBarsVisible by remember { mutableStateOf(false) }
+
+    fun applyImmersive(hide: Boolean) {
+        val window = activity?.window ?: return
+        val view = window.decorView
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 老接口的 immersive sticky 标志：MIUI / 一些 OEM 比 WindowInsetsControllerCompat 更可靠
+        @Suppress("DEPRECATION")
+        view.systemUiVisibility = if (hide) {
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+            android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+        } else {
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        }
+    }
+
     DisposableEffect(activity) {
         val window = activity?.window
-        val view = window?.decorView
-        if (window != null && view != null) {
-            val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
-            // 进入观看页：隐藏系统栏
-            controller.systemBarsBehavior =
-                androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        // 强力开关：让窗口完全无视系统给的 inset 限制（覆盖到状态栏 / 挖孔区域）
+        // 这是 MIUI / 一些 OEM 仍把 Activity 下推 status bar 高度的根因修复
+        var prevCutoutMode: Int? = null
+        if (window != null) {
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val attrs = window.attributes
+                prevCutoutMode = attrs.layoutInDisplayCutoutMode
+                attrs.layoutInDisplayCutoutMode =
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                window.attributes = attrs
+            }
         }
+        applyImmersive(hide = true)
         onDispose {
-            // 离开时恢复
+            val view = window?.decorView
             if (window != null && view != null) {
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P && prevCutoutMode != null) {
+                    val attrs = window.attributes
+                    attrs.layoutInDisplayCutoutMode = prevCutoutMode
+                    window.attributes = attrs
+                }
+                @Suppress("DEPRECATION")
+                view.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
                 val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
                 controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             }
         }
     }
-    // 当 systemBarsVisible 切换时同步系统栏
     LaunchedEffect(systemBarsVisible) {
-        val window = activity?.window ?: return@LaunchedEffect
-        val view = window.decorView
-        val controller = androidx.core.view.WindowInsetsControllerCompat(window, view)
-        if (systemBarsVisible) controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-        else controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        applyImmersive(hide = !systemBarsVisible)
     }
 
     // ② 共享中保持屏幕常亮
@@ -561,9 +628,36 @@ private fun FullscreenVideoView(
         )
     }
 
+    // 用 WindowMetrics 拿屏幕真实尺寸（含系统栏区域），跟 configuration 重读
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val screenBoundsDp = remember(configuration, activity) {
+        val act = activity
+        if (act != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val bounds = act.windowManager.currentWindowMetrics.bounds
+            with(density) {
+                androidx.compose.ui.unit.DpSize(
+                    bounds.width().toDp(),
+                    bounds.height().toDp(),
+                )
+            }
+        } else {
+            val dm = act?.resources?.displayMetrics
+            if (dm != null) with(density) {
+                androidx.compose.ui.unit.DpSize(dm.widthPixels.toDp(), dm.heightPixels.toDp())
+            } else androidx.compose.ui.unit.DpSize(0.dp, 0.dp)
+        }
+    }
+    android.util.Log.d("GuestVM", "screenBoundsDp=$screenBoundsDp config=${configuration.orientation}")
+
     Box(
         modifier = Modifier
-            .fillMaxSize()
+            // 强制使用屏幕真实尺寸，绕开任何 system bar 引起的 inset / shrink
+            .let {
+                if (screenBoundsDp.width > 0.dp && screenBoundsDp.height > 0.dp) {
+                    it.requiredSize(screenBoundsDp)
+                } else it.fillMaxSize()
+            }
             .background(androidx.compose.ui.graphics.Color.Black)
             .onSizeChanged { stageSize = it }
             // 手势放在外层 Box 上，确保不被 SurfaceView 偷走
@@ -650,29 +744,57 @@ private fun FullscreenVideoView(
             }
         }
 
-        // 左上 / 右下控件仅在系统栏可见（用户点击屏幕后）时显示
-        androidx.compose.animation.AnimatedVisibility(
-            visible = systemBarsVisible,
-            modifier = Modifier.align(Alignment.TopStart),
-            enter = androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.fadeOut(),
+        // 顶部按钮使用 alpha 动画（而非 AnimatedVisibility）+ statusBarsIgnoringVisibility
+        // 原因：① AnimatedVisibility 进退场会牵动 layout；② statusBarsPadding 会在系统栏
+        // 显隐瞬间改变 inset 值（沉浸态 -> 0），导致按钮"塌缩+位移+淡出"叠加。
+        // statusBarsIgnoringVisibility 始终返回 status bar 占位高度，按钮位置保持稳定。
+        val controlsAlpha by animateFloatAsState(
+            targetValue = if (systemBarsVisible) 1f else 0f,
+            label = "controlsAlpha",
+        )
+
+        // 左上：返回按钮
+        androidx.compose.material3.IconButton(
+            onClick = askLeave,
+            enabled = systemBarsVisible,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+                .padding(start = 12.dp, top = 12.dp)
+                .size(44.dp)
+                .alpha(controlsAlpha)
+                .background(
+                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                ),
         ) {
-            androidx.compose.material3.IconButton(
-                onClick = askLeave,
-                modifier = Modifier
-                    .padding(start = 12.dp, top = 12.dp)
-                    .size(44.dp)
-                    .background(
-                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                    ),
-            ) {
-                Text(
-                    text = "<",
-                    color = androidx.compose.ui.graphics.Color.White,
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            Text(
+                text = "<",
+                color = androidx.compose.ui.graphics.Color.White,
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+
+        // 右上：充满/适应切换按钮
+        androidx.compose.material3.IconButton(
+            onClick = { fillMode = !fillMode },
+            enabled = systemBarsVisible,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+                .padding(end = 12.dp, top = 12.dp)
+                .size(44.dp)
+                .alpha(controlsAlpha)
+                .background(
+                    color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                ),
+        ) {
+            Text(
+                text = if (fillMode) "▣" else "▢",
+                color = androidx.compose.ui.graphics.Color.White,
+                style = MaterialTheme.typography.titleMedium,
+            )
         }
 
         // 右下角缩放百分比 + 重置
@@ -680,6 +802,7 @@ private fun FullscreenVideoView(
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()             // 让浮窗避开手势条
                     .padding(end = 12.dp, bottom = 12.dp)
                     .background(
                         color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),

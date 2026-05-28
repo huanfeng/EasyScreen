@@ -206,6 +206,13 @@ class WebRTCManager private constructor() {
         return surfaceViewRenderer
     }
 
+    /** 切换 Guest 渲染模式：true=充满(cover, 裁剪溢出) / false=适应(contain, 完整保留+黑边) */
+    fun setRendererFillMode(fill: Boolean) {
+        val mode = if (fill) RendererCommon.ScalingType.SCALE_ASPECT_FILL
+                   else RendererCommon.ScalingType.SCALE_ASPECT_FIT
+        surfaceViewRenderer?.setScalingType(mode)
+    }
+
     /**
      * 释放渲染器资源
      */

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.core.view.WindowCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -30,13 +31,15 @@ import to.feng.app.easyscreen.ui.theme.EasyScreenTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // 强制 decor 不为系统栏让位 —— 内容延伸到挖孔/手势条之下
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
         setContent {
             EasyScreenTheme {
+                // 不在 Surface 上加 windowInsetsPadding —— Guest 观看页需要绘制到挖孔/手势条之下
+                // 由各个 screen 自己按需添加 safeDrawing padding
                 Surface(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing),
+                    modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     EasyScreenApp()

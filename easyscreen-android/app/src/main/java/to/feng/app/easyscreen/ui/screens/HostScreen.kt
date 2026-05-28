@@ -73,6 +73,8 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
 
     private var roomInitialized = false
     private var pendingRecoveryRoomId: String? = null
+    /** 用户主动停止时设为 true，后续 DISCONNECTED 状态不再当作"网络异常"提示 */
+    private var userStopping = false
 
     // 诊断信息收集（每 Guest 一个采样任务）
     private val diagnosticsCollector = DiagnosticsCollector(viewModelScope)
@@ -163,11 +165,13 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
                         )
                     }
                     ConnectionState.CONNECTING -> {
+                        if (userStopping) return@collect
                         _statusMessage.value =
                             if (roomInitialized) "网络已断开，正在自动重连..."
                             else "正在连接服务器..."
                     }
                     ConnectionState.DISCONNECTED -> {
+                        if (userStopping) return@collect
                         if (_roomId.value.isNotEmpty()) {
                             _statusMessage.value = "网络已断开，正在自动重连..."
                         }
@@ -391,6 +395,7 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
     }
 
     fun stopSharing() {
+        userStopping = true
         cleanupResources()
         diagnosticsCollector.stopAll()
         webRTCManager.release()
@@ -520,7 +525,9 @@ fun HostScreen(
     val scrollState = rememberScrollState()
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 顶部返回栏（紧凑，不再额外预留 24dp 空白）

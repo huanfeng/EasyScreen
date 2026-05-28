@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -44,7 +47,10 @@ fun MainScreen(
     // 主页只读取设置中已保存的 serverUrl，不在此处再提供编辑入口
     val serverUrl by rememberSaveable { mutableStateOf(ServerPrefs.get(context)) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .windowInsetsPadding(WindowInsets.safeDrawing)
+    ) {
         // 右上角设置入口
         IconButton(
             onClick = onNavigateToSettings,

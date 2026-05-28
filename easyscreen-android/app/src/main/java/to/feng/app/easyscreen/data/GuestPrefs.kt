@@ -18,4 +18,16 @@ object GuestPrefs {
         val sp = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         sp.edit().putString(KEY_LAST_CODE, code).apply()
     }
+
+    private const val KEY_FILL_MODE = "guest_fill_mode"  // true=充满 / false=适应
+
+    fun getFillMode(context: Context): Boolean {
+        val sp = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return sp.getBoolean(KEY_FILL_MODE, false)
+    }
+
+    fun setFillMode(context: Context, fill: Boolean) {
+        val sp = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        sp.edit().putBoolean(KEY_FILL_MODE, fill).apply()
+    }
 }
