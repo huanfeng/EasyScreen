@@ -41,6 +41,7 @@
   const codeInput = $('code');
   const connectBtn = $('connect-btn');
   const refreshBtn = $('refresh-btn');
+  const clearCodeBtn = $('clear-code-btn');
   const disconnectBtn = $('disconnect-btn');
   const reconnectBtn = $('reconnect-btn');
   const diagBtn = $('diag-btn');
@@ -104,15 +105,24 @@
   const savedCode = localStorage.getItem(LS_KEY_LAST_CODE) || '';
   if (savedCode && /^\d{6}$/.test(savedCode)) {
     codeInput.value = savedCode;
-    connectBtn.disabled = false;
     setStatus(`上次连接的房间号：${savedCode}（点击"开始预览"重新连接）`);
   }
+  updateInputUI();
 
   // 输入限制：仅数字 + 满 6 位才允许点击
+  function updateInputUI() {
+    connectBtn.disabled = codeInput.value.length !== 6;
+    clearCodeBtn.classList.toggle('hidden', codeInput.value.length === 0);
+    refreshBtn.classList.add('hidden');
+  }
   codeInput.addEventListener('input', () => {
     codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
-    connectBtn.disabled = codeInput.value.length !== 6;
-    refreshBtn.classList.add('hidden');  // 用户改输入后隐藏 refresh
+    updateInputUI();
+  });
+  clearCodeBtn.addEventListener('click', () => {
+    codeInput.value = '';
+    updateInputUI();
+    codeInput.focus();
   });
 
   codeInput.addEventListener('keydown', (e) => {

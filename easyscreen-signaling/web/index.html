@@ -18,16 +18,19 @@
     <!-- 输入阶段 -->
     <section id="join-view" class="card">
       <label for="code" class="label">输入 6 位连接码</label>
-      <input
-        id="code"
-        class="code-input"
-        type="text"
-        inputmode="numeric"
-        pattern="[0-9]*"
-        maxlength="6"
-        autocomplete="off"
-        placeholder="------"
-      />
+      <div class="code-input-wrap">
+        <input
+          id="code"
+          class="code-input"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="6"
+          autocomplete="off"
+          placeholder="------"
+        />
+        <button id="clear-code-btn" class="clear-btn hidden" aria-label="清空">×</button>
+      </div>
       <div style="display:flex; gap:8px; align-items:stretch;">
         <button id="connect-btn" class="primary-btn" disabled style="flex:1;">开始预览</button>
         <button id="refresh-btn" class="primary-btn hidden" title="重试连接" style="width:52px; background:var(--surface-2);" aria-label="重试">↻</button>

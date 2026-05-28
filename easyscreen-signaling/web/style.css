@@ -65,12 +65,15 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
 }
 .label.small { font-size: 12px; }
 
+.code-input-wrap {
+  position: relative;
+}
 .code-input {
   width: 100%;
   background: var(--bg);
   border: 2px solid var(--border);
   border-radius: 12px;
-  padding: 20px;
+  padding: 20px 56px 20px 20px;  /* 右边留出清空按钮空间 */
   font-size: 36px;
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
   text-align: center;
@@ -78,6 +81,25 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
   color: var(--text);
   caret-color: var(--primary);
 }
+.clear-btn {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.clear-btn:hover { background: var(--border); color: var(--text); }
 .code-input:focus {
   outline: none;
   border-color: var(--primary);
