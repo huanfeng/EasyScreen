@@ -10,9 +10,17 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+// 服务器运行期统计（累计计数 + 启动时间），全部为匿名聚合数据
+var (
+	serverStartTime   = time.Now()
+	totalRoomsCreated int64 // 累计创建房间数（token 重连复用不计）
+	totalGuestsJoined int64 // 累计观看端加入次数
 )
 
 var upgrader = websocket.Upgrader{
@@ -362,6 +370,7 @@ func (c *Client) handleRegister(msg WSMessage) {
 	}
 	c.role = "host"
 	c.roomID = roomID
+	atomic.AddInt64(&totalRoomsCreated, 1)
 	hub.mu.Unlock()
 
 	log.Printf("新房间 RoomID=%s token=%s maxGuests=%d",
@@ -419,6 +428,7 @@ func (c *Client) handleJoin(msg WSMessage) {
 	c.guestID = gid
 	guestCount := len(room.Guests)
 	room.mu.Unlock()
+	atomic.AddInt64(&totalGuestsJoined, 1)
 	hub.mu.Unlock()
 
 	log.Printf("Guest %s 加入 RoomID=%s（当前观众 %d/%d）", gid[:8], roomID, guestCount, room.MaxGuests)
@@ -618,6 +628,53 @@ func mustMarshal(v interface{}) json.RawMessage {
 	return data
 }
 
+// StatsSnapshot 服务器运行状态快照（全部为匿名聚合数据，不含 roomID/token/IP）
+type StatsSnapshot struct {
+	UptimeSeconds     int64 `json:"uptime_seconds"`      // 运行时长（秒）
+	ActiveRooms       int   `json:"active_rooms"`        // 当前房间总数
+	RoomsWithHost     int   `json:"rooms_with_host"`     // 被控端在线的房间数
+	RoomsAwaitingHost int   `json:"rooms_awaiting_host"` // 被控端离线但 TTL 内等待重连的房间数
+	TotalConnections  int   `json:"total_connections"`   // 当前 WebSocket 连接总数
+	HostCount         int   `json:"host_count"`          // 当前在线被控端数
+	GuestCount        int   `json:"guest_count"`         // 当前在线观看端数
+	GuestDistribution []int `json:"guest_distribution"`  // 各房间的观看端人数（匿名，仅含有观众的房间）
+	TotalRoomsCreated int64 `json:"total_rooms_created"` // 累计创建房间数
+	TotalGuestsJoined int64 `json:"total_guests_joined"` // 累计观看端加入次数
+}
+
+// collectStats 采集当前服务器状态快照
+// 锁顺序与 handleRegister/handleJoin/cleanup 一致（hub → room），不会死锁
+func collectStats() StatsSnapshot {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+
+	s := StatsSnapshot{
+		UptimeSeconds:     int64(time.Since(serverStartTime).Seconds()),
+		TotalConnections:  len(hub.clients),
+		TotalRoomsCreated: atomic.LoadInt64(&totalRoomsCreated),
+		TotalGuestsJoined: atomic.LoadInt64(&totalGuestsJoined),
+		GuestDistribution: []int{},
+	}
+	now := time.Now()
+	for _, room := range rooms {
+		room.mu.RLock()
+		s.ActiveRooms++
+		if room.Host != nil {
+			s.RoomsWithHost++
+			s.HostCount++
+		} else if !room.HostDisconnectedAt.IsZero() && now.Sub(room.HostDisconnectedAt) < hostReconnectTTL {
+			s.RoomsAwaitingHost++
+		}
+		g := len(room.Guests)
+		s.GuestCount += g
+		if g > 0 {
+			s.GuestDistribution = append(s.GuestDistribution, g)
+		}
+		room.mu.RUnlock()
+	}
+	return s
+}
+
 // 定期清理：
 // 1) Host 离线时间超过 TTL 的房间（含 token 映射）
 // 2) Host 和 Guest 都不在的孤儿房间
@@ -662,6 +719,17 @@ func main() {
 			"rooms":   len(rooms),
 			"clients": len(hub.clients),
 		})
+	})
+
+	// 匿名运行状态：JSON 数据接口 + 可视化页面
+	mux.HandleFunc("/stats.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(collectStats())
+	})
+	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(statsHTML))
 	})
 
 	// Web 预览客户端：静态资源托管在 ./web 目录
