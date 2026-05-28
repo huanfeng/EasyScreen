@@ -58,6 +58,19 @@ android {
         }
     }
 
+    signingConfigs {
+        // release 签名信息从环境变量注入（CI 用 Secrets）；本地缺失时 release 回退 debug 签名
+        create("release") {
+            val ksPath = System.getenv("KEYSTORE_FILE")
+            if (!ksPath.isNullOrBlank() && file(ksPath).exists()) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -65,6 +78,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = if (!System.getenv("KEYSTORE_FILE").isNullOrBlank()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
