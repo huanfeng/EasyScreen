@@ -11,9 +11,15 @@ RUN go mod download
 
 COPY *.go ./
 
-# 静态、精简、去符号
+# 版本信息由构建方通过 --build-arg 注入（VPS 部署目录非 git 仓库，无法在容器内读取）
+ARG APP_VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+
+# 静态、精简、去符号；用 -X 注入版本变量
 RUN CGO_ENABLED=0 GOOS=linux \
-    go build -trimpath -ldflags="-s -w" \
+    go build -trimpath \
+    -ldflags="-s -w -X main.appVersion=${APP_VERSION} -X main.gitCommit=${GIT_COMMIT} -X main.buildTime=${BUILD_TIME}" \
     -o easyscreen-signaling .
 
 # ---------- 运行阶段 ----------

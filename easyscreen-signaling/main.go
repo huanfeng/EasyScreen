@@ -23,6 +23,13 @@ var (
 	totalGuestsJoined int64 // 累计观看端加入次数
 )
 
+// 版本信息：编译时通过 -ldflags "-X main.appVersion=... -X main.gitCommit=..." 注入
+var (
+	appVersion = "dev"
+	gitCommit  = "unknown"
+	buildTime  = "unknown"
+)
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -637,9 +644,11 @@ type StatsSnapshot struct {
 	TotalConnections  int   `json:"total_connections"`   // 当前 WebSocket 连接总数
 	HostCount         int   `json:"host_count"`          // 当前在线被控端数
 	GuestCount        int   `json:"guest_count"`         // 当前在线观看端数
-	GuestDistribution []int `json:"guest_distribution"`  // 各房间的观看端人数（匿名，仅含有观众的房间）
-	TotalRoomsCreated int64 `json:"total_rooms_created"` // 累计创建房间数
-	TotalGuestsJoined int64 `json:"total_guests_joined"` // 累计观看端加入次数
+	GuestDistribution []int  `json:"guest_distribution"`  // 各房间的观看端人数（匿名，仅含有观众的房间）
+	TotalRoomsCreated int64  `json:"total_rooms_created"` // 累计创建房间数
+	TotalGuestsJoined int64  `json:"total_guests_joined"` // 累计观看端加入次数
+	Version           string `json:"version"`             // 服务端版本号
+	GitCommit         string `json:"git_commit"`          // 构建时的 git 短哈希
 }
 
 // collectStats 采集当前服务器状态快照
@@ -654,6 +663,8 @@ func collectStats() StatsSnapshot {
 		TotalRoomsCreated: atomic.LoadInt64(&totalRoomsCreated),
 		TotalGuestsJoined: atomic.LoadInt64(&totalGuestsJoined),
 		GuestDistribution: []int{},
+		Version:           appVersion,
+		GitCommit:         gitCommit,
 	}
 	now := time.Now()
 	for _, room := range rooms {
@@ -721,6 +732,17 @@ func main() {
 		})
 	})
 
+	// 版本信息（供 Web 端展示）
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(map[string]string{
+			"version":    appVersion,
+			"git_commit": gitCommit,
+			"build_time": buildTime,
+		})
+	})
+
 	// 匿名运行状态：JSON 数据接口 + 可视化页面
 	mux.HandleFunc("/stats.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -741,7 +763,8 @@ func main() {
 	if addr == "" {
 		addr = ":8081"
 	}
-	log.Printf("EasyScreen 信令服务启动，监听 %s", addr)
+	log.Printf("EasyScreen 信令服务启动 version=%s commit=%s build=%s，监听 %s",
+		appVersion, gitCommit, buildTime, addr)
 	log.Printf("  - WebSocket:  ws://<host>%s/ws", addr)
 	log.Printf("  - Web 预览:   http://<host>%s/", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {

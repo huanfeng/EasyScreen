@@ -153,6 +153,15 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
   font-family: monospace;
 }
 
+.app-version {
+  margin-top: 14px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: monospace;
+  opacity: 0.7;
+}
+
 .hidden { display: none !important; }
 
 /* 视频阶段：真·全屏覆盖（使用 dvh 适配移动端浏览器地址栏伸缩） */

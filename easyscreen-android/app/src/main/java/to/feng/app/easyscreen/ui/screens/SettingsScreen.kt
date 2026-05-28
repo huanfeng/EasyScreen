@@ -166,9 +166,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("构建", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = BuildConfig.GIT_COMMIT,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Divider()
                 Text(
-                    text = "EasyScreen",
+                    text = "远程看屏",
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(

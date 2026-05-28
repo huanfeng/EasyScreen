@@ -114,7 +114,10 @@ const statsHTML = `<!DOCTYPE html>
   <div class="section-title">各房间观看人数分布（匿名）</div>
   <div class="dist" id="dist"><span class="dist-empty">暂无观看中的房间</span></div>
 
-  <footer>数据每 3 秒自动刷新 · 全部为匿名聚合统计</footer>
+  <footer>
+    <div id="version-line">服务端版本 --</div>
+    <div style="margin-top:4px;">数据每 3 秒自动刷新 · 全部为匿名聚合统计</div>
+  </footer>
 
 <script>
 (function () {
@@ -173,6 +176,9 @@ const statsHTML = `<!DOCTYPE html>
         setText('guest-count', d.guest_count);
         setText('total-rooms', d.total_rooms_created);
         setText('total-guests', d.total_guests_joined);
+        var ver = d.version || 'dev';
+        var commit = d.git_commit || 'unknown';
+        setText('version-line', '服务端版本 ' + ver + ' · ' + commit);
         renderDist(d.guest_distribution);
         var now = new Date();
         var hh = String(now.getHours()).padStart(2, '0');

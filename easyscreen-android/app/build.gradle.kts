@@ -22,6 +22,22 @@ fun loadDefaultServerUrl(): String {
 }
 val defaultServerUrl: String = loadDefaultServerUrl()
 
+// 取当前 git 短哈希注入 BuildConfig，用于"关于"页展示构建版本
+fun gitCommitHash(): String {
+    return try {
+        val p = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+        val out = p.inputStream.bufferedReader().readText().trim()
+        p.waitFor()
+        if (out.isNotEmpty()) out else "unknown"
+    } catch (e: Exception) {
+        "unknown"
+    }
+}
+val gitCommit: String = gitCommitHash()
+
 android {
     namespace = "to.feng.app.easyscreen"
     compileSdk = 34
@@ -34,6 +50,7 @@ android {
         versionName = "1.1"
 
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$defaultServerUrl\"")
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

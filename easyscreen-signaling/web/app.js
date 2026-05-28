@@ -109,6 +109,15 @@
   }
   updateInputUI();
 
+  // 拉取服务端版本与 git 哈希，显示在输入页底部
+  fetch('/version', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((d) => {
+      const el = $('app-version');
+      if (el) el.textContent = `远程看屏 v${d.version || 'dev'} · ${d.git_commit || 'unknown'}`;
+    })
+    .catch(() => {});
+
   // 输入限制：仅数字 + 满 6 位才允许点击
   function updateInputUI() {
     connectBtn.disabled = codeInput.value.length !== 6;
