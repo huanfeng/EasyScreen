@@ -38,6 +38,12 @@ fun gitCommitHash(): String {
 }
 val gitCommit: String = gitCommitHash()
 
+// 版本号：CI 在 tag 构建时通过环境变量注入；本地/未注入时用默认值
+val appVersionName: String =
+    System.getenv("APP_VERSION_NAME").takeUnless { it.isNullOrBlank() } ?: "1.2.0"
+val appVersionCode: Int =
+    System.getenv("APP_VERSION_CODE").takeUnless { it.isNullOrBlank() }?.toIntOrNull() ?: 3
+
 android {
     namespace = "to.feng.app.easyscreen"
     compileSdk = 34
@@ -46,8 +52,8 @@ android {
         applicationId = "to.feng.app.easyscreen"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$defaultServerUrl\"")
         buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")

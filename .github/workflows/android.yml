@@ -42,6 +42,16 @@ jobs:
             echo "未配置 ANDROID_KEYSTORE_BASE64，release 将回退 debug 签名"
           fi
 
+      - name: Resolve app version
+        id: ver
+        run: |
+          # tag 构建：versionName 取 tag（去 v 前缀）；非 tag 留空 → gradle 用默认值
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "name=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build release APK
         env:
           EASYSCREEN_DEFAULT_SERVER_URL: ${{ secrets.EASYSCREEN_DEFAULT_SERVER_URL }}
@@ -49,6 +59,8 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APP_VERSION_NAME: ${{ steps.ver.outputs.name }}
+          APP_VERSION_CODE: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
           ./gradlew :app:assembleRelease --no-daemon
