@@ -119,7 +119,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Compose BOM
-    implementation(platform("androidx.compose:compose-bom:2024.01.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -145,6 +145,6 @@ dependencies {
     // JSON parsing
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // Debug
-    debugImplementation("androidx.compose.ui:ui-tooling:1.7.5")
+    // Debug —— 不指定版本，跟随 BOM 保持与 release 一致
+    debugImplementation("androidx.compose.ui:ui-tooling")
 }
