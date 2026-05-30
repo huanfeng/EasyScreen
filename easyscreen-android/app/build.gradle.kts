@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 import java.util.Properties
@@ -46,12 +47,12 @@ val appVersionCode: Int =
 
 android {
     namespace = "to.feng.app.easyscreen"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "to.feng.app.easyscreen"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
 
@@ -102,9 +103,8 @@ android {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // 注：Kotlin 2.x 起 Compose 编译器版本由 org.jetbrains.kotlin.plugin.compose
+    // 跟随 Kotlin 版本管理，已弃用 composeOptions.kotlinCompilerExtensionVersion
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -119,7 +119,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
 
     // Compose BOM
-    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation(platform("androidx.compose:compose-bom:2026.05.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
