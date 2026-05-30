@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.IntentCompat
 import to.feng.app.easyscreen.MainActivity
 import to.feng.app.easyscreen.webrtc.WebRTCManager
 
@@ -87,7 +88,7 @@ class ScreenCaptureService : Service() {
                 }
 
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
-                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+                val resultData = IntentCompat.getParcelableExtra(intent, EXTRA_RESULT_DATA, Intent::class.java)
                 if (resultData == null) {
                     Log.e(TAG, "Missing MediaProjection result data")
                     stopSelf()

@@ -14,7 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -844,7 +844,7 @@ private fun DiagnosticsPanel(diagnostics: Map<String, PeerDiagnostics>) {
         diagnostics.values.forEachIndexed { idx, d ->
             if (idx > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(8.dp))
             }
             Text(
