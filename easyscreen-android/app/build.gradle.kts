@@ -41,9 +41,9 @@ val gitCommit: String = gitCommitHash()
 
 // 版本号：CI 在 tag 构建时通过环境变量注入；本地/未注入时用默认值
 val appVersionName: String =
-    System.getenv("APP_VERSION_NAME").takeUnless { it.isNullOrBlank() } ?: "1.2.0"
+    System.getenv("APP_VERSION_NAME").takeUnless { it.isNullOrBlank() } ?: "1.2.1"
 val appVersionCode: Int =
-    System.getenv("APP_VERSION_CODE").takeUnless { it.isNullOrBlank() }?.toIntOrNull() ?: 3
+    System.getenv("APP_VERSION_CODE").takeUnless { it.isNullOrBlank() }?.toIntOrNull() ?: 4
 
 android {
     namespace = "to.feng.app.easyscreen"
