@@ -1,0 +1,154 @@
+package to.feng.app.easyscreen.annotation
+
+import android.annotation.SuppressLint
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.os.SystemClock
+import android.util.Log
+import android.view.View
+import to.feng.app.easyscreen.data.DrawPayload
+import to.feng.app.easyscreen.data.DrawTool
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+
+/**
+ * 老人端系统浮窗的绘制 View。维护 AnnotationStore，按动画帧重绘并淡出。
+ * 触摸穿透由 WindowManager 的 FLAG_NOT_TOUCHABLE 保证，本 View 不处理触摸。
+ */
+@SuppressLint("ViewConstructor")
+class AnnotationOverlayView(context: Context) : View(context) {
+
+    private val store = AnnotationStore()
+
+    private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(4f)
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val path = Path()
+
+    /** 由浮窗管理器在收到 draw_command 时调用。 */
+    fun submit(payload: DrawPayload) {
+        store.apply(payload, SystemClock.uptimeMillis())
+        scheduleFrame()
+    }
+
+    fun clearAll() {
+        store.clear()
+        invalidate()
+    }
+
+    private fun scheduleFrame() {
+        postInvalidateOnAnimation()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val now = SystemClock.uptimeMillis()
+        val annotations = store.snapshot(now)
+        for (a in annotations) {
+            val color = parseColor(a.color)
+            when (a.tool) {
+                DrawTool.PEN, DrawTool.LASER -> drawPenOrLaser(canvas, a, color)
+                DrawTool.CIRCLE -> drawCircle(canvas, a, color)
+                DrawTool.ARROW -> drawArrow(canvas, a, color)
+                DrawTool.RIPPLE -> drawRipple(canvas, a, color)
+            }
+        }
+        if (annotations.isNotEmpty()) {
+            postInvalidateOnAnimation()
+        }
+    }
+
+    private fun px(nx: Float, ny: Float): Pair<Float, Float> =
+        CoordinateMapping.normalizedToPixel(nx, ny, width, height)
+
+    private fun drawPenOrLaser(canvas: Canvas, a: RenderAnnotation, color: Int) {
+        if (a.points.isEmpty()) return
+        if (a.tool == DrawTool.LASER) {
+            val (cx, cy) = px(a.points.last().x, a.points.last().y)
+            fillPaint.color = withAlpha(color, a.alpha * 0.25f)
+            canvas.drawCircle(cx, cy, dp(22f), fillPaint)
+            fillPaint.color = withAlpha(color, a.alpha)
+            canvas.drawCircle(cx, cy, dp(9f), fillPaint)
+            return
+        }
+        path.reset()
+        val first = px(a.points[0].x, a.points[0].y)
+        path.moveTo(first.first, first.second)
+        for (i in 1 until a.points.size) {
+            val (x, y) = px(a.points[i].x, a.points[i].y)
+            path.lineTo(x, y)
+        }
+        strokePaint.color = withAlpha(color, a.alpha)
+        strokePaint.strokeWidth = dp(5f)
+        canvas.drawPath(path, strokePaint)
+    }
+
+    private fun drawCircle(canvas: Canvas, a: RenderAnnotation, color: Int) {
+        if (a.points.isEmpty()) return
+        val (cx, cy) = px(a.points[0].x, a.points[0].y)
+        val r = if (a.points.size >= 2) {
+            val (ex, ey) = px(a.points[1].x, a.points[1].y)
+            hypot((ex - cx).toDouble(), (ey - cy).toDouble()).toFloat()
+        } else dp(60f)
+        strokePaint.color = withAlpha(color, a.alpha)
+        strokePaint.strokeWidth = dp(5f)
+        canvas.drawCircle(cx, cy, r.coerceAtLeast(dp(8f)), strokePaint)
+    }
+
+    private fun drawArrow(canvas: Canvas, a: RenderAnnotation, color: Int) {
+        if (a.points.size < 2) return
+        val (sx, sy) = px(a.points[0].x, a.points[0].y)
+        val (ex, ey) = px(a.points[1].x, a.points[1].y)
+        strokePaint.color = withAlpha(color, a.alpha)
+        strokePaint.strokeWidth = dp(5f)
+        canvas.drawLine(sx, sy, ex, ey, strokePaint)
+        val angle = atan2((ey - sy).toDouble(), (ex - sx).toDouble())
+        val head = dp(22f)
+        val spread = Math.toRadians(28.0)
+        for (s in intArrayOf(-1, 1)) {
+            val a2 = angle + s * spread
+            canvas.drawLine(
+                ex, ey,
+                ex - (head * cos(a2)).toFloat(),
+                ey - (head * sin(a2)).toFloat(),
+                strokePaint,
+            )
+        }
+    }
+
+    private fun drawRipple(canvas: Canvas, a: RenderAnnotation, color: Int) {
+        if (a.points.isEmpty()) return
+        val (cx, cy) = px(a.points[0].x, a.points[0].y)
+        val t = (a.ageMs.toFloat() / 600f).coerceIn(0f, 1f)
+        val r = dp(12f) + dp(48f) * t
+        strokePaint.color = withAlpha(color, (1f - t))
+        strokePaint.strokeWidth = dp(4f)
+        canvas.drawCircle(cx, cy, r, strokePaint)
+        fillPaint.color = withAlpha(color, (1f - t))
+        canvas.drawCircle(cx, cy, dp(8f), fillPaint)
+    }
+
+    private fun parseColor(s: String): Int = try {
+        Color.parseColor(s)
+    } catch (e: Exception) {
+        Log.w("AnnotationOverlay", "bad color $s")
+        Color.RED
+    }
+
+    private fun withAlpha(color: Int, alpha: Float): Int {
+        val a = (Color.alpha(color) * alpha.coerceIn(0f, 1f)).toInt()
+        return Color.argb(a, Color.red(color), Color.green(color), Color.blue(color))
+    }
+
+    private fun dp(v: Float): Float = v * resources.displayMetrics.density
+}
