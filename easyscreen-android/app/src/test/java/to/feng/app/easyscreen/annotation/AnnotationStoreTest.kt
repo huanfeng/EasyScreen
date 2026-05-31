@@ -55,6 +55,19 @@ class AnnotationStoreTest {
     }
 
     @Test
+    fun circleEnd_withoutExplicitEdge_preservesLastDragPoint() {
+        // 模拟真实 app：拖动产生 POINT 设定边缘，END 不带 x2/y2
+        val store = AnnotationStore()
+        store.apply(DrawPayload(id = "c", op = DrawOp.BEGIN, tool = DrawTool.CIRCLE, x = 0.5f, y = 0.5f), 0)
+        store.apply(DrawPayload(id = "c", op = DrawOp.POINT, tool = DrawTool.CIRCLE, x = 0.7f, y = 0.5f), 5)
+        store.apply(DrawPayload(id = "c", op = DrawOp.END, tool = DrawTool.CIRCLE, x = 0.5f, y = 0.5f), 10)
+        val pts = store.snapshot(20)[0].points
+        assertEquals(2, pts.size)
+        assertEquals(0.5f, pts[0].x, 0.001f)   // 圆心
+        assertEquals(0.7f, pts[1].x, 0.001f)   // 边缘应保留最后一次 POINT，而非塌回圆心
+    }
+
+    @Test
     fun rippleTap_isFinishedImmediately() {
         val store = AnnotationStore()
         store.apply(DrawPayload(id = "r", op = DrawOp.TAP, tool = DrawTool.RIPPLE, x = 0.3f, y = 0.4f), 0)

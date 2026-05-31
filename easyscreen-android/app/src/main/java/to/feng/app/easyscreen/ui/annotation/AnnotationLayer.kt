@@ -96,6 +96,7 @@ fun AnnotationLayer(
                     var id = ""
                     var lastSent = 0L
                     var startN: Pair<Float, Float>? = null
+                    var lastN: Pair<Float, Float>? = null
                     detectDragGestures(
                         onDragStart = { o ->
                             val n = norm(o)
@@ -109,6 +110,7 @@ fun AnnotationLayer(
                             if (id.isNotEmpty()) {
                                 val n = norm(change.position)
                                 if (n != null) {
+                                    lastN = n
                                     val now = SystemClock.uptimeMillis()
                                     if (now - lastSent >= 60) {
                                         lastSent = now
@@ -119,7 +121,12 @@ fun AnnotationLayer(
                         },
                         onDragEnd = {
                             if (id.isNotEmpty()) {
-                                send(DrawOp.END, tool, startN?.first ?: 0f, startN?.second ?: 0f, id)
+                                send(
+                                    DrawOp.END, tool,
+                                    startN?.first ?: 0f, startN?.second ?: 0f, id,
+                                    lastN?.first ?: startN?.first ?: 0f,
+                                    lastN?.second ?: startN?.second ?: 0f,
+                                )
                                 id = ""
                             }
                         },

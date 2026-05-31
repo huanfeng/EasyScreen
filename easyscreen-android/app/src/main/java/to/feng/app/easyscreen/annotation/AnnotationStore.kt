@@ -70,9 +70,15 @@ class AnnotationStore(
             DrawOp.END -> {
                 val it = items[p.id] ?: return
                 if (p.tool == DrawTool.CIRCLE || p.tool == DrawTool.ARROW) {
-                    val edge = NPoint(p.x2, p.y2).takeIf { p.x2 != 0f || p.y2 != 0f }
-                        ?: NPoint(p.x, p.y)
-                    if (it.points.size < 2) it.points.add(edge) else it.points[1] = edge
+                    if (p.x2 != 0f || p.y2 != 0f) {
+                        // 显式带了终点 → 用它
+                        val edge = NPoint(p.x2, p.y2)
+                        if (it.points.size < 2) it.points.add(edge) else it.points[1] = edge
+                    } else if (it.points.size < 2) {
+                        // 极快点击没有任何 POINT → 用起点兜底，避免空形状
+                        it.points.add(NPoint(p.x, p.y))
+                    }
+                    // 否则：保留拖动中最后一次 POINT 落点，不塌回起点
                 }
                 it.finishedAt = nowMs
             }
