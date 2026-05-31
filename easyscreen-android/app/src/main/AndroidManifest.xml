@@ -20,6 +20,9 @@
     <!-- WakeLock：避免 MIUI 等机型在后台进入 Doze 中断 UDP 心跳 -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- 系统浮窗：老人端在所有 App 之上显示子女的画笔标注 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

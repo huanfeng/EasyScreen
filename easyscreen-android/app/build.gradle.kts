@@ -147,4 +147,7 @@ dependencies {
 
     // Debug —— 不指定版本，跟随 BOM 保持与 release 一致
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // 单元测试（纯 JVM，运行在 test source set）
+    testImplementation("junit:junit:4.13.2")
 }
