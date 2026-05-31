@@ -50,6 +50,8 @@
       <div id="video-canvas" class="video-canvas">
         <video id="remote-video" autoplay playsinline muted></video>
       </div>
+      <!-- 标注叠加层：平时 pointer-events:none，标注模式下捕获指针 -->
+      <canvas id="annotation-canvas" class="annotation-canvas"></canvas>
       <div id="overlay" class="overlay">
         <div class="spinner"></div>
         <p id="overlay-text">正在建立连接…</p>
@@ -69,6 +71,26 @@
       <!-- 断开时显示的"返回主页"按钮（覆盖在 overlay 内） -->
       <button id="back-home-btn" class="primary-btn hidden" style="position:absolute; bottom:25%; left:50%; transform:translateX(-50%); padding:12px 24px; z-index:21;">返回主页</button>
 
+      <!-- 进入标注模式入口（左下，zoom-bar 上方） -->
+      <button id="annotate-btn" class="floating-action floating-annotate" aria-label="标注">✎</button>
+
+      <!-- 标注工具条（顶部居中，默认隐藏） -->
+      <div id="annotation-toolbar" class="annotation-toolbar hidden">
+        <button class="anno-tool" data-tool="circle" title="圆圈">○</button>
+        <button class="anno-tool" data-tool="arrow" title="箭头">→</button>
+        <button class="anno-tool" data-tool="pen" title="自由画笔">✎</button>
+        <button class="anno-tool" data-tool="ripple" title="点击波纹">·</button>
+        <button class="anno-tool" data-tool="laser" title="实时指针">◉</button>
+        <span class="anno-sep"></span>
+        <button class="anno-color" data-color="#FF3B30" style="background:#FF3B30"></button>
+        <button class="anno-color" data-color="#FFCC00" style="background:#FFCC00"></button>
+        <button class="anno-color" data-color="#34C759" style="background:#34C759"></button>
+        <button class="anno-color" data-color="#0A84FF" style="background:#0A84FF"></button>
+        <span class="anno-sep"></span>
+        <button id="anno-clear" class="anno-text-btn" title="清空">清空</button>
+        <button id="anno-exit" class="anno-text-btn" title="退出标注">✕</button>
+      </div>
+
       <!-- 右上角操作按钮组 -->
       <button id="fit-btn" class="floating-action floating-fit" aria-label="切换适应/充满">▣</button>
       <button id="fs-btn" class="floating-action floating-fs" aria-label="全屏">⛶</button>
@@ -87,6 +109,7 @@
     </section>
   </main>
 
+  <script src="/annotation.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
