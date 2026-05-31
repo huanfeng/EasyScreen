@@ -17,6 +17,7 @@
     DISCONNECT: 'disconnect',
     PING: 'ping',
     PONG: 'pong',
+    DRAW_COMMAND: 'draw_command',
   };
 
   // ---------- ICE 服务器：STUN + 公共 TURN ----------
@@ -51,6 +52,9 @@
   const statusEl = $('status');
   const videoStage = $('video-view');
   const videoCanvas = $('video-canvas');
+  const annotationCanvas = $('annotation-canvas');
+  const annotationToolbar = $('annotation-toolbar');
+  const annotateBtn = $('annotate-btn');
   const fsBtn = $('fs-btn');
   const fitBtn = $('fit-btn');
   const backHomeBtn = $('back-home-btn');
@@ -75,6 +79,7 @@
   let combinedStream = null;
   let currentRoomId = '';
   let myGuestId = '';
+  let annotationActive = false;
 
   const LS_KEY_LAST_CODE = 'easyscreen.lastCode';
 
@@ -733,6 +738,7 @@
   // ---- 滚轮缩放（PC） ----
   videoStage.addEventListener('wheel', (e) => {
     if (videoStage.classList.contains('hidden')) return;
+    if (annotationActive) return;
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     zoomAt(view.scale * factor, e.clientX, e.clientY);
@@ -741,6 +747,7 @@
   // ---- 双击切换 100%/200% ----
   let lastTap = 0;
   videoStage.addEventListener('click', (e) => {
+    if (annotationActive) return;
     // 忽略浮动按钮点击
     if (e.target.closest('.floating-action') || e.target.closest('.zoom-bar') ||
         e.target.closest('.diag-panel') || e.target.closest('.floating-stats')) return;
@@ -760,6 +767,7 @@
   let panStart = null;
 
   videoCanvas.addEventListener('pointerdown', (e) => {
+    if (annotationActive) return;
     videoCanvas.setPointerCapture(e.pointerId);
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
@@ -774,6 +782,7 @@
   });
 
   videoCanvas.addEventListener('pointermove', (e) => {
+    if (annotationActive) return;
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
@@ -858,6 +867,24 @@
     clampPan();
     applyTransform();
   });
+
+  // ---------- 画笔标注 ----------
+  if (window.AnnotationOverlay && annotationCanvas && annotationToolbar && annotateBtn) {
+    window.AnnotationOverlay.init({
+      stageEl: videoStage,
+      videoEl: video,
+      canvasEl: annotationCanvas,
+      toolbarEl: annotationToolbar,
+      entryBtnEl: annotateBtn,
+      getFitCover: () => fitMode === 'cover',
+      getGuestId: () => myGuestId,
+      send: (payload) => send({ type: MSG.DRAW_COMMAND, payload: payload }),
+      onModeChange: (on) => {
+        annotationActive = on;
+        if (on) resetView();
+      },
+    });
+  }
 
   // 初始化一次
   resetView();
