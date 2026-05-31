@@ -100,8 +100,179 @@
     }
   }
 
+  // 标注模式 UI 控制器：叠加 canvas 渲染 + 指针手势 + 工具条
   function init(opts) {
-    if (root && root.console) root.console.warn('[annotation] init not yet implemented');
+    const stageEl = opts.stageEl, videoEl = opts.videoEl, canvasEl = opts.canvasEl;
+    const toolbarEl = opts.toolbarEl, entryBtnEl = opts.entryBtnEl;
+    const getFitCover = opts.getFitCover, getGuestId = opts.getGuestId;
+    const send = opts.send, onModeChange = opts.onModeChange;
+    if (!stageEl || !videoEl || !canvasEl || !toolbarEl || !entryBtnEl) return;
+
+    const ctx = canvasEl.getContext('2d');
+    const store = new AnnotationStore();
+    let active = false;
+    let tool = DrawTool.CIRCLE;
+    let colorHex = '#FF3B30';
+    let dpr = window.devicePixelRatio || 1;
+    let rafId = 0;
+
+    function resizeCanvas() {
+      const rect = stageEl.getBoundingClientRect();
+      dpr = window.devicePixelRatio || 1;
+      canvasEl.width = Math.round(rect.width * dpr);
+      canvasEl.height = Math.round(rect.height * dpr);
+      canvasEl.style.width = rect.width + 'px';
+      canvasEl.style.height = rect.height + 'px';
+    }
+
+    function norm(clientX, clientY) {
+      const rect = stageEl.getBoundingClientRect();
+      const x = clientX - rect.left, y = clientY - rect.top;
+      return CoordinateMapping.touchToNormalized(
+        x, y, rect.width, rect.height,
+        videoEl.videoWidth || 0, videoEl.videoHeight || 0, !!getFitCover(),
+      );
+    }
+
+    function uid() { return Math.random().toString(36).slice(2, 10); }
+
+    function emit(op, t, nx, ny, id, nx2, ny2) {
+      const p = {
+        id: id, op: op, tool: t, x: nx, y: ny,
+        x2: nx2 || 0, y2: ny2 || 0, color: colorHex,
+        guest_id: getGuestId ? getGuestId() : '', ts: Date.now(),
+      };
+      store.apply(p, performance.now());
+      send(p);
+    }
+
+    const drag = { id: '', startN: null, lastN: null, lastSent: 0 };
+
+    function onDown(e) {
+      if (!active) return;
+      canvasEl.setPointerCapture(e.pointerId);
+      const n = norm(e.clientX, e.clientY);
+      if (tool === DrawTool.RIPPLE) {
+        if (n) emit(DrawOp.TAP, DrawTool.RIPPLE, n[0], n[1], uid());
+        return;
+      }
+      if (!n) return;
+      drag.id = uid(); drag.startN = n; drag.lastN = n; drag.lastSent = 0;
+      emit(DrawOp.BEGIN, tool, n[0], n[1], drag.id);
+    }
+    function onMove(e) {
+      if (!active || !drag.id || tool === DrawTool.RIPPLE) return;
+      const n = norm(e.clientX, e.clientY);
+      if (!n) return;
+      drag.lastN = n;
+      const now = performance.now();
+      if (now - drag.lastSent >= 60) {
+        drag.lastSent = now;
+        emit(DrawOp.POINT, tool, n[0], n[1], drag.id);
+      }
+    }
+    function onUp() {
+      if (!active || !drag.id || tool === DrawTool.RIPPLE) return;
+      const s = drag.startN || [0, 0], l = drag.lastN || s;
+      emit(DrawOp.END, tool, s[0], s[1], drag.id, l[0], l[1]);
+      drag.id = '';
+    }
+
+    canvasEl.addEventListener('pointerdown', onDown);
+    canvasEl.addEventListener('pointermove', onMove);
+    canvasEl.addEventListener('pointerup', onUp);
+    canvasEl.addEventListener('pointercancel', onUp);
+
+    function px(n, rect) { return [n[0] * rect.width, n[1] * rect.height]; }
+    function draw() {
+      const rect = stageEl.getBoundingClientRect();
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      const snap = store.snapshot(performance.now());
+      for (let i = 0; i < snap.length; i++) drawOne(snap[i], rect);
+      rafId = requestAnimationFrame(draw);
+    }
+    function rgba(hex, a) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+      return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a))})`;
+    }
+    function drawOne(a, rect) {
+      const pts = a.points;
+      if (!pts.length) return;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (a.tool === DrawTool.LASER) {
+        const c = px(pts[pts.length - 1], rect);
+        ctx.fillStyle = rgba(a.color, a.alpha * 0.25);
+        ctx.beginPath(); ctx.arc(c[0], c[1], 22, 0, 7); ctx.fill();
+        ctx.fillStyle = rgba(a.color, a.alpha);
+        ctx.beginPath(); ctx.arc(c[0], c[1], 9, 0, 7); ctx.fill();
+      } else if (a.tool === DrawTool.PEN) {
+        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 5;
+        ctx.beginPath();
+        const p0 = px(pts[0], rect); ctx.moveTo(p0[0], p0[1]);
+        for (let i = 1; i < pts.length; i++) { const q = px(pts[i], rect); ctx.lineTo(q[0], q[1]); }
+        ctx.stroke();
+      } else if (a.tool === DrawTool.CIRCLE) {
+        const c = px(pts[0], rect);
+        let r = 60;
+        if (pts.length >= 2) { const e = px(pts[1], rect); r = Math.hypot(e[0] - c[0], e[1] - c[1]); }
+        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(c[0], c[1], Math.max(8, r), 0, 7); ctx.stroke();
+      } else if (a.tool === DrawTool.ARROW) {
+        if (pts.length < 2) return;
+        const s = px(pts[0], rect), e = px(pts[1], rect);
+        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(e[0], e[1]); ctx.stroke();
+        const ang = Math.atan2(e[1] - s[1], e[0] - s[0]);
+        const head = 22, spread = 28 * Math.PI / 180;
+        for (const sgn of [-1, 1]) {
+          const a2 = ang + sgn * spread;
+          ctx.beginPath(); ctx.moveTo(e[0], e[1]);
+          ctx.lineTo(e[0] - head * Math.cos(a2), e[1] - head * Math.sin(a2)); ctx.stroke();
+        }
+      } else if (a.tool === DrawTool.RIPPLE) {
+        const c = px(pts[0], rect);
+        const t = Math.max(0, Math.min(1, a.ageMs / 600));
+        ctx.strokeStyle = rgba(a.color, 1 - t); ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(c[0], c[1], 12 + 48 * t, 0, 7); ctx.stroke();
+        ctx.fillStyle = rgba(a.color, 1 - t);
+        ctx.beginPath(); ctx.arc(c[0], c[1], 8, 0, 7); ctx.fill();
+      }
+    }
+
+    const toolBtns = toolbarEl.querySelectorAll('.anno-tool');
+    const colorBtns = toolbarEl.querySelectorAll('.anno-color');
+    function refreshToolbarUI() {
+      toolBtns.forEach((b) => b.classList.toggle('selected', b.getAttribute('data-tool') === tool));
+      colorBtns.forEach((b) => b.classList.toggle('selected', b.getAttribute('data-color') === colorHex));
+    }
+    toolBtns.forEach((b) => b.addEventListener('click', () => { tool = b.getAttribute('data-tool'); refreshToolbarUI(); }));
+    colorBtns.forEach((b) => b.addEventListener('click', () => { colorHex = b.getAttribute('data-color'); refreshToolbarUI(); }));
+    const clearBtn = toolbarEl.querySelector('#anno-clear');
+    const exitBtn = toolbarEl.querySelector('#anno-exit');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      store.clear();
+      send({ id: '', op: DrawOp.CLEAR, tool: '', x: 0, y: 0, x2: 0, y2: 0, color: colorHex, guest_id: getGuestId ? getGuestId() : '', ts: Date.now() });
+    });
+    if (exitBtn) exitBtn.addEventListener('click', () => setActive(false));
+
+    function setActive(on) {
+      if (active === on) return;
+      active = on;
+      canvasEl.style.pointerEvents = on ? 'auto' : 'none';
+      toolbarEl.classList.toggle('hidden', !on);
+      entryBtnEl.classList.toggle('hidden', on);
+      if (on) { resizeCanvas(); refreshToolbarUI(); }
+      else { drag.id = ''; }
+      if (onModeChange) onModeChange(on);
+    }
+    entryBtnEl.addEventListener('click', () => setActive(true));
+    window.addEventListener('resize', () => { if (active) resizeCanvas(); });
+
+    resizeCanvas();
+    rafId = requestAnimationFrame(draw);
+    refreshToolbarUI();
   }
 
   const api = { CoordinateMapping, AnnotationStore, DrawOp, DrawTool, init };
