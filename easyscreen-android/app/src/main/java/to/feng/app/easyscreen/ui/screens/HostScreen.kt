@@ -289,6 +289,16 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
                 }
             }
 
+            MessageType.DRAW_COMMAND -> {
+                val payload = try {
+                    gson.fromJson(gson.toJson(message.payload), DrawPayload::class.java)
+                } catch (e: Exception) { return }
+                // 浮窗只在共享进行中有意义
+                if (_isSharing.value) {
+                    to.feng.app.easyscreen.annotation.AnnotationOverlayManager.submit(appContext, payload)
+                }
+            }
+
             MessageType.DISCONNECT -> {
                 _guestConnected.value = false
                 cleanupResources()
@@ -392,6 +402,7 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
     private fun cleanupResources() {
         _isSharing.value = false
         ScreenCaptureService.stop(appContext)
+        to.feng.app.easyscreen.annotation.AnnotationOverlayManager.hide()
     }
 
     fun stopSharing() {
@@ -550,6 +561,47 @@ fun HostScreen(
                 .padding(horizontal = 24.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+
+        // 浮窗权限提示：未授权时显示一键跳转入口（子女语音指导老人点这里）
+        val ctxForOverlay = LocalContext.current
+        var overlayGranted by remember {
+            mutableStateOf(android.provider.Settings.canDrawOverlays(ctxForOverlay))
+        }
+        // 从系统设置页返回时复检
+        val lifecycleForOverlay = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleForOverlay) {
+            val obs = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    overlayGranted = android.provider.Settings.canDrawOverlays(ctxForOverlay)
+                }
+            }
+            lifecycleForOverlay.lifecycle.addObserver(obs)
+            onDispose { lifecycleForOverlay.lifecycle.removeObserver(obs) }
+        }
+        if (!overlayGranted) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = WaitingAmber.copy(alpha = 0.15f)
+                ),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text(
+                        "开启「悬浮窗」后，对方就能在你的屏幕上画圈指导你操作",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = {
+                        val intent = Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:${ctxForOverlay.packageName}"),
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        try { ctxForOverlay.startActivity(intent) } catch (_: Exception) {}
+                    }) { Text("去开启悬浮窗") }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         // UI 按"对端是否在看"区分，而不是"屏幕采集是否在跑"
         if (!guestConnected) {
