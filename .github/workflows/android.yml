@@ -65,15 +65,27 @@ jobs:
           chmod +x ./gradlew
           ./gradlew :app:assembleRelease --no-daemon
 
+      - name: Rename APK with version
+        run: |
+          APK_DIR=easyscreen-android/app/build/outputs/apk/release
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            NEW_NAME="EasyScreen-v${{ steps.ver.outputs.name }}-release.apk"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            NEW_NAME="EasyScreen-${GITHUB_REF_NAME}-${SHORT_SHA}-release.apk"
+          fi
+          mv "$APK_DIR/app-release.apk" "$APK_DIR/$NEW_NAME"
+          echo "Renamed to: $NEW_NAME"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: easyscreen-release-apk
-          path: easyscreen-android/app/build/outputs/apk/release/*.apk
+          path: easyscreen-android/app/build/outputs/apk/release/EasyScreen-*.apk
           if-no-files-found: error
 
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: easyscreen-android/app/build/outputs/apk/release/*.apk
+          files: easyscreen-android/app/build/outputs/apk/release/EasyScreen-*.apk
