@@ -180,6 +180,11 @@ class GuestViewModel(private val serverUrl: String, private val appContext: andr
         _inputCode.value = code.filter { it.isDigit() }.take(6)
     }
 
+    /** 发送一条画笔标注指令到老人端（经服务端转发）。 */
+    fun sendDraw(payload: DrawPayload) {
+        signalingClient.send(SignalingMessage(type = MessageType.DRAW_COMMAND, payload = payload))
+    }
+
     fun joinRoom() {
         val code = _inputCode.value
         if (code.length != 6) {
@@ -458,6 +463,7 @@ fun GuestScreen(
             createRenderer = { viewModel.createRemoteView() },
             sourceSize = sourceSize,
             onLeaveToInput = { viewModel.leaveSession() },
+            onSendDraw = { viewModel.sendDraw(it) },
         )
     }
 }
@@ -469,6 +475,7 @@ private fun FullscreenVideoView(
     createRenderer: () -> org.webrtc.SurfaceViewRenderer?,
     sourceSize: WebRTCManager.SourceSize,
     onLeaveToInput: () -> Unit,
+    onSendDraw: (DrawPayload) -> Unit,
 ) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -484,6 +491,11 @@ private fun FullscreenVideoView(
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var stageSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var annotationMode by remember { mutableStateOf(false) }
+    // 进入标注模式时锁定缩放/平移，保证坐标映射简单可靠
+    LaunchedEffect(annotationMode) {
+        if (annotationMode) { scale = 1f; offset = androidx.compose.ui.geometry.Offset.Zero }
+    }
     val minScale = 1f
     val maxScale = 6f
 
@@ -661,7 +673,8 @@ private fun FullscreenVideoView(
             .background(androidx.compose.ui.graphics.Color.Black)
             .onSizeChanged { stageSize = it }
             // 手势放在外层 Box 上，确保不被 SurfaceView 偷走
-            .pointerInput(Unit) {
+            .pointerInput(annotationMode) {
+                if (annotationMode) return@pointerInput
                 detectTransformGestures(panZoomLock = false) { centroid, pan, zoom, _ ->
                     val newScale = (scale * zoom).coerceIn(minScale, maxScale)
                     var newOffset = offset
@@ -685,7 +698,8 @@ private fun FullscreenVideoView(
                     if (scale <= 1.001f) offset = androidx.compose.ui.geometry.Offset.Zero
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(annotationMode) {
+                if (annotationMode) return@pointerInput
                 detectTapGestures(
                     onTap = {
                         // 单击切换系统栏显示
@@ -828,6 +842,39 @@ private fun FullscreenVideoView(
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
+            }
+        }
+
+        // 标注层（仅标注模式显示，盖在视频之上）
+        if (annotationMode && remoteViewReady) {
+            val eff = sourceSize.effectiveSize()
+            to.feng.app.easyscreen.ui.annotation.AnnotationLayer(
+                srcW = eff.first,
+                srcH = eff.second,
+                fillCover = fillMode,
+                onSend = onSendDraw,
+                onExit = { annotationMode = false },
+            )
+        }
+
+        // 左下：进入标注模式按钮（仅系统栏可见时显示，避免误触）
+        if (!annotationMode) {
+            androidx.compose.material3.IconButton(
+                onClick = { annotationMode = true },
+                enabled = systemBarsVisible && remoteViewReady,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .navigationBarsPadding()
+                    .padding(start = 12.dp, bottom = 12.dp)
+                    .size(44.dp)
+                    .alpha(controlsAlpha)
+                    .background(
+                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f),
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    ),
+            ) {
+                Text("✎", color = androidx.compose.ui.graphics.Color.White,
+                    style = MaterialTheme.typography.titleLarge)
             }
         }
     }
