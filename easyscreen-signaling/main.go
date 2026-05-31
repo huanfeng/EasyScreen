@@ -53,6 +53,7 @@ const (
 	TypeGuestJoin      = "guest_join"      // 服 → Host：通知有新 Guest 加入
 	TypeGuestLeave     = "guest_leave"     // 服 → Host：通知 Guest 离开
 	TypeKickGuest      = "kick_guest"      // Host → 服 → Guest：房主踢人
+	TypeDrawCommand    = "draw_command"    // Guest → 服 → Host：画笔标注指令
 )
 
 // WSMessage WebSocket 消息结构
@@ -256,6 +257,8 @@ func (c *Client) handleMessage(message []byte) {
 		c.handleDisconnect()
 	case TypeKickGuest:
 		c.handleKickGuest(msg)
+	case TypeDrawCommand:
+		c.forwardMessage(msg, TypeDrawCommand)
 	default:
 		c.sendError("未知消息类型: " + msg.Type)
 	}
