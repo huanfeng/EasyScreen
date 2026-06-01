@@ -66,6 +66,19 @@ docker compose up -d --build
 ghcr.io/huanfeng/easyscreen-signaling:latest
 ```
 
+## App 在线更新
+
+信令服务器可作为 GitHub Release 的国内缓存代理，让老人端 App 自动检查/下载更新：
+
+| 端点 | 用途 |
+|------|------|
+| `/app/version.json` | 最新版本元数据（懒加载从 GitHub 同步并缓存） |
+| `/app/download` | 缓存的最新 APK（支持断点续传） |
+
+启用方式：在 docker-compose 环境变量设置 `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭）。可选 `EASYSCREEN_GITHUB_TOKEN` 提高 GitHub API 限流。APK 缓存在命名卷 `easyscreen-apk-cache`（容器内 `/app/cache`），不烧进镜像。
+
+发版流程不变：打 `v*` tag → CI 构建 APK 并生成 `version.json` 一起发布到 GitHub Release → 服务器下次请求时自动同步。tag 注释信息（`git tag -a v1.2.2 -m "..."`）作为更新说明；注释含 `[force]` 时该版本标记为强制更新。
+
 ## 服务状态端点
 
 信令服务提供以下匿名端点（不含房间号 / IP / token）：

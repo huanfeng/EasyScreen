@@ -92,6 +92,16 @@ sudo chown -R easyscreen:easyscreen /opt/easyscreen
 sudo systemctl restart easyscreen-signaling
 ```
 
+## App 在线更新（可选）
+
+让信令服务作为 GitHub Release 的国内缓存代理，老人端 App 即可自动检查/下载更新。在 systemd service 的环境变量中加入：
+
+- `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭更新端点）
+- 可选 `EASYSCREEN_GITHUB_TOKEN`（提高 GitHub API 限流）
+- `EASYSCREEN_APP_CACHE_DIR`（可写目录，如 `/var/lib/easyscreen/cache`）
+
+编辑 `easyscreen-signaling.service` 的 `Environment=` 行后执行 `sudo systemctl daemon-reload && sudo systemctl restart easyscreen-signaling`。反代（Caddy）需放行 `/app/version.json` 与 `/app/download`（APK 可能较大，注意上传/下载体大小限制）。
+
 ## 资源占用参考
 
 - 信令服务本身：闲时 < 10 MB 内存、< 1% CPU

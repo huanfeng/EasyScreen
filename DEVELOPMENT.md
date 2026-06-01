@@ -139,6 +139,13 @@ Docker 推送使用内置 `GITHUB_TOKEN`，无需额外 Secret（workflow 已声
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\your.jks")) | Out-File -NoNewline keystore.b64.txt
 ```
 
+## App 在线更新机制
+
+- **CI**：`android.yml` 在 tag 构建时除 APK 外生成 `version.json`（versionCode/versionName/sha256/fileSize/forceUpdate/minSupportedVersionCode/releaseNotes/downloadUrl），用 `jq` 生成以安全转义注释文本，一并附到 GitHub Release。
+- **信令服务**：`app_update.go` 懒加载（默认 TTL 15min）从 GitHub `releases/latest` 同步 `version.json` 与 APK 到 `EASYSCREEN_APP_CACHE_DIR`，sha256 校验后缓存；并发请求有防重入；GitHub 不可达时降级返回旧缓存。环境变量：`EASYSCREEN_GITHUB_REPO`、`EASYSCREEN_GITHUB_TOKEN`、`EASYSCREEN_APP_CACHE_DIR`、`EASYSCREEN_APP_SYNC_TTL`。
+- **安卓端**：`update/` 包。启动静默检查、设置页手动检查；比较 `BuildConfig.VERSION_CODE`；下载到 `externalCacheDir/update/`、sha256 校验；经 FileProvider（`${applicationId}.fileprovider`）触发系统安装器，需 `REQUEST_INSTALL_PACKAGES` 权限 + 用户授权「允许安装未知应用」。
+- **强制更新**：`forceUpdate=true` 或当前 `versionCode < minSupportedVersionCode` 时对话框不可取消。
+
 ## 信令协议要点
 
 WebSocket 消息结构：`{ type, room_id?, data?, payload? }`。
