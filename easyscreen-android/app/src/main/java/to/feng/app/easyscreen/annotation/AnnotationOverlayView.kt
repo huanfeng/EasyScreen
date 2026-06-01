@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.os.SystemClock
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.View
 import to.feng.app.easyscreen.data.DrawPayload
@@ -36,6 +37,19 @@ class AnnotationOverlayView(context: Context) : View(context) {
     }
     private val path = Path()
 
+    private val locOnScreen = IntArray(2)
+    private val realMetrics = DisplayMetrics()
+    private val debugPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = dp(2f)
+        color = Color.argb(200, 0, 230, 0)
+    }
+
+    companion object {
+        /** 调试：画出浮窗实际可绘制边框，确认与全屏采集画面的差异。验证后改回 false。 */
+        var DEBUG_BOUNDS = true
+    }
+
     /** 由浮窗管理器在收到 draw_command 时调用。 */
     fun submit(payload: DrawPayload) {
         store.apply(payload, SystemClock.uptimeMillis())
@@ -52,6 +66,10 @@ class AnnotationOverlayView(context: Context) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (DEBUG_BOUNDS) {
+            // 画出浮窗实际可绘制边框：在老人端被采集回传后，可直观看出它够不到状态栏/导航栏
+            canvas.drawRect(1f, 1f, width - 1f, height - 1f, debugPaint)
+        }
         val now = SystemClock.uptimeMillis()
         val annotations = store.snapshot(now)
         for (a in annotations) {
@@ -68,8 +86,30 @@ class AnnotationOverlayView(context: Context) : View(context) {
         }
     }
 
-    private fun px(nx: Float, ny: Float): Pair<Float, Float> =
-        CoordinateMapping.normalizedToPixel(nx, ny, width, height)
+    /**
+     * 归一化 [0,1] → 本浮窗内像素。
+     *
+     * 关键修正：[0,1] 相对的是"全屏采集画面"，但本系统浮窗画不到状态栏/导航栏之上，
+     * 其可绘制区域比采集画面小、且被系统下移内缩。若直接按浮窗自身尺寸等比映射，
+     * 标注会被整体收缩（点顶偏下、点底偏上）。
+     * 正确做法：映射到真实全屏尺寸得到屏幕坐标，再减去浮窗在屏幕上的偏移
+     * （getLocationOnScreen），换算为 View 内坐标；落在状态栏区域的会被自然裁掉。
+     */
+    private fun px(nx: Float, ny: Float): Pair<Float, Float> {
+        val d = display
+        if (d != null) {
+            @Suppress("DEPRECATION")
+            d.getRealMetrics(realMetrics)
+            val fw = realMetrics.widthPixels
+            val fh = realMetrics.heightPixels
+            if (fw > 0 && fh > 0) {
+                getLocationOnScreen(locOnScreen)
+                return (nx * fw - locOnScreen[0]) to (ny * fh - locOnScreen[1])
+            }
+        }
+        // 兜底：display 不可用时退回旧映射
+        return CoordinateMapping.normalizedToPixel(nx, ny, width, height)
+    }
 
     private fun drawPenOrLaser(canvas: Canvas, a: RenderAnnotation, color: Int) {
         if (a.points.isEmpty()) return
