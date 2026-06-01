@@ -62,3 +62,8 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# 工具/构建产物
+.playwright-mcp/
+easyscreen-signaling/deploy/dist/
+easyscreen-android/.kotlin/
