@@ -94,4 +94,14 @@ assert(CoordinateMapping.touchToNormalized(10, 10, 100, 100, 0, 0, false) === nu
   assert(Math.abs(p[0] - 300) < 1e-3 && Math.abs(p[1] - 300) < 1e-3, 'cover round-trip');
 }
 
+// ---- 矩形：两点逻辑与圆/箭头一致，END 不带 x2 保留拖动落点 ----
+{
+  const s = new AnnotationStore();
+  s.apply({ id: 'r', op: DrawOp.BEGIN, tool: DrawTool.RECT, x: 0.2, y: 0.2 }, 0);
+  s.apply({ id: 'r', op: DrawOp.POINT, tool: DrawTool.RECT, x: 0.6, y: 0.5 }, 5);
+  s.apply({ id: 'r', op: DrawOp.END, tool: DrawTool.RECT, x: 0.2, y: 0.2 }, 10);
+  const pts = s.snapshot(20)[0].points;
+  assert(pts.length === 2 && Math.abs(pts[1][0] - 0.6) < 1e-3 && Math.abs(pts[1][1] - 0.5) < 1e-3, 'rect END preserves dragged corner');
+}
+
 console.log('✓ all web annotation logic tests passed');

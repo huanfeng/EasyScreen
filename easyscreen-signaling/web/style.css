@@ -482,3 +482,8 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
 }
 .anno-pos-item:hover { background: rgba(255, 255, 255, 0.15); }
 .anno-pos-item.active { background: rgba(255, 255, 255, 0.3); }
+
+/* 窄屏适配：工具条过长时换行（不用 overflow 滚动，避免裁掉位置弹出菜单） */
+.annotation-toolbar { flex-wrap: wrap; justify-content: center; }
+.annotation-toolbar.pos-top, .annotation-toolbar.pos-bottom { max-width: calc(100vw - 16px); }
+.annotation-toolbar.pos-left, .annotation-toolbar.pos-right { max-height: calc(100vh - 16px); }

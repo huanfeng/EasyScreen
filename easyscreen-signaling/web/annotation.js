@@ -7,7 +7,7 @@
   function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 
   const DrawOp = { BEGIN: 'begin', POINT: 'point', END: 'end', TAP: 'tap', CLEAR: 'clear', BOUNDS_ON: 'bounds_on', BOUNDS_OFF: 'bounds_off' };
-  const DrawTool = { LASER: 'laser', PEN: 'pen', CIRCLE: 'circle', ARROW: 'arrow', RIPPLE: 'ripple' };
+  const DrawTool = { LASER: 'laser', PEN: 'pen', CIRCLE: 'circle', RECT: 'rect', ARROW: 'arrow', RIPPLE: 'ripple' };
 
   const CoordinateMapping = {
     touchToNormalized: function (touchX, touchY, stageW, stageH, srcW, srcH, fillCover) {
@@ -63,7 +63,7 @@
           const it = this.items.get(p.id); if (!it) break;
           if (p.tool === DrawTool.PEN) it.points.push([p.x, p.y]);
           else if (p.tool === DrawTool.LASER) it.points = [[p.x, p.y]];
-          else if (p.tool === DrawTool.CIRCLE || p.tool === DrawTool.ARROW) {
+          else if (p.tool === DrawTool.CIRCLE || p.tool === DrawTool.RECT || p.tool === DrawTool.ARROW) {
             if (it.points.length < 2) it.points.push([p.x, p.y]);
             else it.points[1] = [p.x, p.y];
           }
@@ -71,7 +71,7 @@
         }
         case DrawOp.END: {
           const it = this.items.get(p.id); if (!it) break;
-          if (p.tool === DrawTool.CIRCLE || p.tool === DrawTool.ARROW) {
+          if (p.tool === DrawTool.CIRCLE || p.tool === DrawTool.RECT || p.tool === DrawTool.ARROW) {
             if ((p.x2 || 0) !== 0 || (p.y2 || 0) !== 0) {
               const edge = [p.x2, p.y2];
               if (it.points.length < 2) it.points.push(edge); else it.points[1] = edge;
@@ -231,10 +231,15 @@
         ctx.stroke();
       } else if (a.tool === DrawTool.CIRCLE) {
         const c = px(pts[0], rect);
-        let r = 60;
+        let r = 6;   // 未拖动默认最小，避免先出大圈再跳变
         if (pts.length >= 2) { const e = px(pts[1], rect); r = Math.hypot(e[0] - c[0], e[1] - c[1]); }
-        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 5;
-        ctx.beginPath(); ctx.arc(c[0], c[1], Math.max(8, r), 0, 7); ctx.stroke();
+        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(c[0], c[1], Math.max(3, r), 0, 7); ctx.stroke();
+      } else if (a.tool === DrawTool.RECT) {
+        const s = px(pts[0], rect);
+        const e = pts.length >= 2 ? px(pts[1], rect) : [s[0] + 6, s[1] + 6];
+        ctx.strokeStyle = rgba(a.color, a.alpha); ctx.lineWidth = 3;
+        ctx.strokeRect(Math.min(s[0], e[0]), Math.min(s[1], e[1]), Math.abs(e[0] - s[0]), Math.abs(e[1] - s[1]));
       } else if (a.tool === DrawTool.ARROW) {
         if (pts.length < 2) return;
         const s = px(pts[0], rect), e = px(pts[1], rect);
