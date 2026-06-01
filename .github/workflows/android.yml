@@ -77,6 +77,32 @@ jobs:
           mv "$APK_DIR/app-release.apk" "$APK_DIR/$NEW_NAME"
           echo "Renamed to: $NEW_NAME"
 
+      - name: Generate version.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          APK_DIR=easyscreen-android/app/build/outputs/apk/release
+          APK_PATH=$(ls "$APK_DIR"/EasyScreen-*.apk | head -n1)
+          VERSION_NAME="${{ steps.ver.outputs.name }}"
+          VERSION_CODE="${{ github.run_number }}"
+          SHA256=$(sha256sum "$APK_PATH" | awk '{print $1}')
+          FILE_SIZE=$(stat -c%s "$APK_PATH")
+          # tag 注释信息作为更新说明；含 [force] 则标记强制更新
+          TAG_MSG=$(git tag -l --format='%(contents)' "v${VERSION_NAME}")
+          if echo "$TAG_MSG" | grep -q '\[force\]'; then FORCE=true; else FORCE=false; fi
+          RELEASE_NOTES=$(echo "$TAG_MSG" | sed 's/\[force\]//g' | sed ':a;N;$!ba;s/\n/ /g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+          # 用 jq 生成，自动转义 releaseNotes 中的引号/特殊字符，避免破坏 JSON
+          jq -n \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg versionName "$VERSION_NAME" \
+            --arg sha256 "$SHA256" \
+            --argjson fileSize "$FILE_SIZE" \
+            --argjson forceUpdate "$FORCE" \
+            --arg releaseNotes "$RELEASE_NOTES" \
+            '{versionCode: $versionCode, versionName: $versionName, sha256: $sha256, fileSize: $fileSize, forceUpdate: $forceUpdate, minSupportedVersionCode: 1, releaseNotes: $releaseNotes, downloadUrl: "/app/download"}' \
+            > "$APK_DIR/version.json"
+          echo "--- generated version.json ---"
+          cat "$APK_DIR/version.json"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -88,4 +114,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: easyscreen-android/app/build/outputs/apk/release/EasyScreen-*.apk
+          files: |
+            easyscreen-android/app/build/outputs/apk/release/EasyScreen-*.apk
+            easyscreen-android/app/build/outputs/apk/release/version.json
