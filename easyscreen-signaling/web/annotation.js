@@ -6,7 +6,7 @@
 
   function clamp01(v) { return Math.min(1, Math.max(0, v)); }
 
-  const DrawOp = { BEGIN: 'begin', POINT: 'point', END: 'end', TAP: 'tap', CLEAR: 'clear' };
+  const DrawOp = { BEGIN: 'begin', POINT: 'point', END: 'end', TAP: 'tap', CLEAR: 'clear', BOUNDS_ON: 'bounds_on', BOUNDS_OFF: 'bounds_off' };
   const DrawTool = { LASER: 'laser', PEN: 'pen', CIRCLE: 'circle', ARROW: 'arrow', RIPPLE: 'ripple' };
 
   const CoordinateMapping = {
@@ -273,18 +273,52 @@
     });
     if (exitBtn) exitBtn.addEventListener('click', () => setActive(false));
 
-    // 工具条位置（上/右/下/左，持久化），点 ⤢ 循环切换，适应不同遮挡
-    const POSITIONS = ['top', 'right', 'bottom', 'left'];
-    let posIdx = Math.max(0, POSITIONS.indexOf(localStorage.getItem('easyscreen.annoPos') || 'top'));
-    function applyPos() {
-      const p = POSITIONS[posIdx];
+    // 工具条位置：点按钮弹小菜单选择（顶/底/左/右），持久化
+    const POSITIONS = [
+      { key: 'top', label: '顶部' }, { key: 'bottom', label: '底部' },
+      { key: 'left', label: '左侧' }, { key: 'right', label: '右侧' },
+    ];
+    function curPos() { return localStorage.getItem('easyscreen.annoPos') || 'top'; }
+    function applyPos(p) {
       toolbarEl.classList.remove('pos-top', 'pos-right', 'pos-bottom', 'pos-left');
       toolbarEl.classList.add('pos-' + p);
       try { localStorage.setItem('easyscreen.annoPos', p); } catch (_) {}
     }
     const posBtn = toolbarEl.querySelector('#anno-pos');
-    if (posBtn) posBtn.addEventListener('click', () => { posIdx = (posIdx + 1) % POSITIONS.length; applyPos(); });
-    applyPos();
+    let posMenu = null;
+    function closePosMenu() { if (posMenu) { posMenu.remove(); posMenu = null; } }
+    function openPosMenu() {
+      closePosMenu();
+      posMenu = document.createElement('div');
+      posMenu.className = 'anno-pos-menu' + (curPos() === 'bottom' ? ' up' : '');
+      POSITIONS.forEach((o) => {
+        const b = document.createElement('button');
+        b.textContent = o.label;
+        b.className = 'anno-pos-item' + (curPos() === o.key ? ' active' : '');
+        b.addEventListener('click', (e) => { e.stopPropagation(); applyPos(o.key); closePosMenu(); });
+        posMenu.appendChild(b);
+      });
+      toolbarEl.appendChild(posMenu);
+    }
+    if (posBtn) posBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (posMenu) closePosMenu(); else openPosMenu();
+    });
+    document.addEventListener('click', closePosMenu);
+    applyPos(curPos());
+
+    // 浮窗边框（诊断）：远程开关老人端绿色可绘制边框
+    let boundsOn = false;
+    const boundsBtn = toolbarEl.querySelector('#anno-bounds');
+    if (boundsBtn) boundsBtn.addEventListener('click', () => {
+      boundsOn = !boundsOn;
+      boundsBtn.classList.toggle('active', boundsOn);
+      send({
+        id: '', op: boundsOn ? DrawOp.BOUNDS_ON : DrawOp.BOUNDS_OFF, tool: '',
+        x: 0, y: 0, x2: 0, y2: 0, color: colorHex,
+        guest_id: getGuestId ? getGuestId() : '', ts: Date.now(),
+      });
+    });
 
     function setActive(on) {
       if (active === on) return;
