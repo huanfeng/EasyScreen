@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -134,7 +135,9 @@ func (u *AppUpdater) sync() error {
 	if err != nil {
 		return err
 	}
-	if info.SHA256 != "" && sum != info.SHA256 {
+	if info.SHA256 == "" {
+		log.Printf("[app_update] version.json 未提供 sha256，跳过校验（versionCode=%d）", info.VersionCode)
+	} else if sum != info.SHA256 {
 		os.Remove(tmp)
 		return fmt.Errorf("sha256 mismatch: want %s got %s", info.SHA256, sum)
 	}
@@ -147,9 +150,11 @@ func (u *AppUpdater) sync() error {
 		info.FileSize = size
 	}
 
-	// 落盘元数据
+	// 落盘元数据（失败不影响本次内存缓存，但记录以便排查重启后缓存丢失）
 	meta, _ := json.Marshal(info)
-	os.WriteFile(filepath.Join(u.cacheDir, "version.json"), meta, 0o644)
+	if err := os.WriteFile(filepath.Join(u.cacheDir, "version.json"), meta, 0o644); err != nil {
+		log.Printf("[app_update] 元数据写入失败，重启后将丢失缓存: %v", err)
+	}
 
 	u.mu.Lock()
 	u.info = info
@@ -189,11 +194,16 @@ func (u *AppUpdater) downloadTo(url, path string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	defer f.Close()
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, h), resp.Body)
 	if err != nil {
-		return "", 0, err
+		f.Close()
+		os.Remove(path)
+		return "", 0, fmt.Errorf("write apk: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(path)
+		return "", 0, fmt.Errorf("close apk: %w", err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }
