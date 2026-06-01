@@ -285,12 +285,13 @@
       try { localStorage.setItem('easyscreen.annoPos', p); } catch (_) {}
     }
     const posBtn = toolbarEl.querySelector('#anno-pos');
+    const posWrap = toolbarEl.querySelector('.anno-pos-wrap') || toolbarEl;
     let posMenu = null;
     function closePosMenu() { if (posMenu) { posMenu.remove(); posMenu = null; } }
     function openPosMenu() {
       closePosMenu();
       posMenu = document.createElement('div');
-      posMenu.className = 'anno-pos-menu' + (curPos() === 'bottom' ? ' up' : '');
+      posMenu.className = 'anno-pos-menu';   // 定位到按钮右侧（CSS 控制）
       POSITIONS.forEach((o) => {
         const b = document.createElement('button');
         b.textContent = o.label;
@@ -298,7 +299,7 @@
         b.addEventListener('click', (e) => { e.stopPropagation(); applyPos(o.key); closePosMenu(); });
         posMenu.appendChild(b);
       });
-      toolbarEl.appendChild(posMenu);
+      posWrap.appendChild(posMenu);
     }
     if (posBtn) posBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -312,7 +313,7 @@
     const boundsBtn = toolbarEl.querySelector('#anno-bounds');
     if (boundsBtn) boundsBtn.addEventListener('click', () => {
       boundsOn = !boundsOn;
-      boundsBtn.classList.toggle('active', boundsOn);
+      boundsBtn.textContent = (boundsOn ? '☑' : '☐') + ' 边框';
       send({
         id: '', op: boundsOn ? DrawOp.BOUNDS_ON : DrawOp.BOUNDS_OFF, tool: '',
         x: 0, y: 0, x2: 0, y2: 0, color: colorHex,
