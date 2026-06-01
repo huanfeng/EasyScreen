@@ -57,6 +57,7 @@ fun AnnotationLayer(
 ) {
     var tool by remember { mutableStateOf(DrawTool.CIRCLE) }
     var colorHex by remember { mutableStateOf(PALETTE[0]) }
+    var boundsOn by remember { mutableStateOf(false) }
     var stageSize by remember { mutableStateOf(IntSize.Zero) }
     val store = remember { AnnotationStore() }
     var frameTick by remember { mutableStateOf(0L) }
@@ -217,6 +218,14 @@ fun AnnotationLayer(
                 )
             }
             Spacer(Modifier.width(8.dp))
+            // 边框诊断开关：远程开/关老人端浮窗可绘制边框（与 Web 端一致，用复选符号表示）
+            ToolButton(if (boundsOn) "☑框" else "☐框", false) {
+                boundsOn = !boundsOn
+                onSend(DrawPayload(
+                    op = if (boundsOn) DrawOp.BOUNDS_ON else DrawOp.BOUNDS_OFF,
+                    color = colorHex, ts = SystemClock.uptimeMillis(),
+                ))
+            }
             ToolButton("清空", false) {
                 store.clear()
                 onSend(DrawPayload(op = DrawOp.CLEAR, ts = SystemClock.uptimeMillis()))
