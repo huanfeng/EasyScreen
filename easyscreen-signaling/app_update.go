@@ -50,6 +50,7 @@ type AppUpdater struct {
 	info     *AppVersionInfo
 	apkPath  string
 	lastSync time.Time
+	syncing  bool // ensureFresh 防重入：已有同步进行时其余请求直接用旧缓存
 }
 
 func NewAppUpdater(repo, token, cacheDir string, ttl time.Duration) *AppUpdater {
@@ -206,6 +207,58 @@ func (u *AppUpdater) downloadTo(url, path string) (string, int64, error) {
 		return "", 0, fmt.Errorf("close apk: %w", err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), n, nil
+}
+
+// ensureFresh 在缓存过期且当前无同步进行时，触发一次刷新；
+// 已有同步进行中或缓存仍新鲜时直接返回（沿用现有缓存）。
+func (u *AppUpdater) ensureFresh() {
+	u.mu.Lock()
+	stale := u.info == nil || u.now().Sub(u.lastSync) >= u.ttl
+	if !stale || u.syncing {
+		u.mu.Unlock()
+		return
+	}
+	u.syncing = true
+	u.mu.Unlock()
+
+	defer func() {
+		u.mu.Lock()
+		u.syncing = false
+		u.mu.Unlock()
+	}()
+	// 刷新失败时静默：保留旧缓存（降级）
+	_ = u.sync()
+}
+
+func (u *AppUpdater) handleVersion(w http.ResponseWriter, r *http.Request) {
+	u.ensureFresh()
+	info := u.snapshot()
+	if info == nil {
+		http.Error(w, `{"error":"update info unavailable"}`, http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(info)
+}
+
+func (u *AppUpdater) handleDownload(w http.ResponseWriter, r *http.Request) {
+	u.ensureFresh()
+	u.mu.Lock()
+	apkPath := u.apkPath
+	versionName := ""
+	if u.info != nil {
+		versionName = u.info.VersionName
+	}
+	u.mu.Unlock()
+	if apkPath == "" {
+		http.Error(w, "apk unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.android.package-archive")
+	w.Header().Set("Content-Disposition",
+		fmt.Sprintf(`attachment; filename="EasyScreen-v%s-release.apk"`, versionName))
+	http.ServeFile(w, r, apkPath) // ServeFile 自动支持 Range 断点续传
 }
 
 // loadFromDisk 在启动时尝试恢复上次缓存，避免重启冷启动。

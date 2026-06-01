@@ -127,3 +127,92 @@ func TestDiskRestore(t *testing.T) {
 		t.Fatal("disk restore failed")
 	}
 }
+
+func TestVersionEndpointLazyAndCache(t *testing.T) {
+	apk := []byte("apkapk")
+	info := AppVersionInfo{
+		VersionCode: 9, VersionName: "1.3", SHA256: sha256hex(apk),
+		FileSize: int64(len(apk)), MinSupportedVersionCode: 1, DownloadURL: "/app/download",
+	}
+	gh := fakeGitHub(t, info, apk)
+	dir := t.TempDir()
+	u := NewAppUpdater("owner/repo", "", dir, 15*time.Minute)
+	u.githubAPI = gh.URL
+
+	// 第一次请求：触发同步，返回 200 + JSON
+	r1 := httptest.NewRequest(http.MethodGet, "/app/version.json", nil)
+	w1 := httptest.NewRecorder()
+	u.handleVersion(w1, r1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("want 200 got %d", w1.Code)
+	}
+	var out AppVersionInfo
+	json.Unmarshal(w1.Body.Bytes(), &out)
+	if out.VersionCode != 9 || out.DownloadURL != "/app/download" {
+		t.Fatalf("bad payload %+v", out)
+	}
+	first := u.lastSync
+
+	// 第二次请求（TTL 内）：命中缓存，不更新 lastSync
+	r2 := httptest.NewRequest(http.MethodGet, "/app/version.json", nil)
+	u.handleVersion(httptest.NewRecorder(), r2)
+	if !u.lastSync.Equal(first) {
+		t.Fatal("expected cache hit (lastSync unchanged)")
+	}
+}
+
+func TestVersionEndpointDegradesToCache(t *testing.T) {
+	apk := []byte("apkapk")
+	info := AppVersionInfo{
+		VersionCode: 9, VersionName: "1.3", SHA256: sha256hex(apk),
+		FileSize: int64(len(apk)), MinSupportedVersionCode: 1, DownloadURL: "/app/download",
+	}
+	gh := fakeGitHub(t, info, apk)
+	dir := t.TempDir()
+	u := NewAppUpdater("owner/repo", "", dir, 0) // ttl=0 → 每次都尝试刷新
+	u.githubAPI = gh.URL
+
+	// 先成功同步一次
+	u.handleVersion(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/app/version.json", nil))
+	// 让 GitHub 挂掉
+	gh.Close()
+	// 再请求：刷新失败但应降级返回旧缓存
+	w := httptest.NewRecorder()
+	u.handleVersion(w, httptest.NewRequest(http.MethodGet, "/app/version.json", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected degrade to 200 cache, got %d", w.Code)
+	}
+}
+
+func TestVersionEndpointNoCacheReturns503(t *testing.T) {
+	dir := t.TempDir()
+	u := NewAppUpdater("owner/repo", "", dir, 0)
+	u.githubAPI = "http://127.0.0.1:0" // 必失败
+	w := httptest.NewRecorder()
+	u.handleVersion(w, httptest.NewRequest(http.MethodGet, "/app/version.json", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503 got %d", w.Code)
+	}
+}
+
+func TestDownloadEndpointServesApk(t *testing.T) {
+	apk := []byte("real-apk-content")
+	info := AppVersionInfo{
+		VersionCode: 9, VersionName: "1.3", SHA256: sha256hex(apk),
+		FileSize: int64(len(apk)), MinSupportedVersionCode: 1, DownloadURL: "/app/download",
+	}
+	gh := fakeGitHub(t, info, apk)
+	dir := t.TempDir()
+	u := NewAppUpdater("owner/repo", "", dir, 15*time.Minute)
+	u.githubAPI = gh.URL
+	u.handleVersion(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/app/version.json", nil))
+
+	w := httptest.NewRecorder()
+	u.handleDownload(w, httptest.NewRequest(http.MethodGet, "/app/download", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200 got %d", w.Code)
+	}
+	if w.Body.String() != string(apk) {
+		t.Fatal("apk content mismatch")
+	}
+}
