@@ -16,8 +16,18 @@ services:
     environment:
       EASYSCREEN_ADDR: ":8081"
       TZ: Asia/Shanghai
+      # App 在线更新：留空则关闭更新端点
+      EASYSCREEN_GITHUB_REPO: ${EASYSCREEN_GITHUB_REPO:-}
+      EASYSCREEN_GITHUB_TOKEN: ${EASYSCREEN_GITHUB_TOKEN:-}
+      EASYSCREEN_APP_CACHE_DIR: /app/cache
+      EASYSCREEN_APP_SYNC_TTL: ${EASYSCREEN_APP_SYNC_TTL:-15m}
+    volumes:
+      - easyscreen-apk-cache:/app/cache
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  easyscreen-apk-cache:
