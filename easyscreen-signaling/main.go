@@ -757,6 +757,30 @@ func main() {
 		w.Write([]byte(statsHTML))
 	})
 
+	// App 在线更新：信令服务器作为 GitHub Release 的国内缓存代理
+	{
+		repo := os.Getenv("EASYSCREEN_GITHUB_REPO")
+		cacheDir := os.Getenv("EASYSCREEN_APP_CACHE_DIR")
+		if cacheDir == "" {
+			cacheDir = "/app/cache"
+		}
+		ttl := 15 * time.Minute
+		if v := os.Getenv("EASYSCREEN_APP_SYNC_TTL"); v != "" {
+			if d, err := time.ParseDuration(v); err == nil {
+				ttl = d
+			}
+		}
+		updater := NewAppUpdater(repo, os.Getenv("EASYSCREEN_GITHUB_TOKEN"), cacheDir, ttl)
+		if updater.Enabled() {
+			updater.loadFromDisk()
+			mux.HandleFunc("/app/version.json", updater.handleVersion)
+			mux.HandleFunc("/app/download", updater.handleDownload)
+			log.Printf("  - App 更新:   /app/version.json (repo=%s, cache=%s)", repo, cacheDir)
+		} else {
+			log.Printf("  - App 更新:   未启用（设置 EASYSCREEN_GITHUB_REPO 以开启）")
+		}
+	}
+
 	// Web 预览客户端：静态资源托管在 ./web 目录
 	// 通过浏览器访问 http://<host>:8081/ 即可作为 Guest 接入
 	webFS := http.FileServer(http.Dir("./web"))
