@@ -77,6 +77,7 @@ class AnnotationOverlayView(context: Context) : View(context) {
             when (a.tool) {
                 DrawTool.PEN, DrawTool.LASER -> drawPenOrLaser(canvas, a, color)
                 DrawTool.CIRCLE -> drawCircle(canvas, a, color)
+                DrawTool.RECT -> drawRect(canvas, a, color)
                 DrawTool.ARROW -> drawArrow(canvas, a, color)
                 DrawTool.RIPPLE -> drawRipple(canvas, a, color)
             }
@@ -139,10 +140,20 @@ class AnnotationOverlayView(context: Context) : View(context) {
         val r = if (a.points.size >= 2) {
             val (ex, ey) = px(a.points[1].x, a.points[1].y)
             hypot((ex - cx).toDouble(), (ey - cy).toDouble()).toFloat()
-        } else dp(60f)
+        } else dp(6f)   // 未拖动时默认最小，避免先出大圈再跳变
         strokePaint.color = withAlpha(color, a.alpha)
-        strokePaint.strokeWidth = dp(5f)
-        canvas.drawCircle(cx, cy, r.coerceAtLeast(dp(8f)), strokePaint)
+        strokePaint.strokeWidth = dp(3f)
+        canvas.drawCircle(cx, cy, r.coerceAtLeast(dp(3f)), strokePaint)
+    }
+
+    private fun drawRect(canvas: Canvas, a: RenderAnnotation, color: Int) {
+        if (a.points.isEmpty()) return
+        val (sx, sy) = px(a.points[0].x, a.points[0].y)
+        val (ex, ey) = if (a.points.size >= 2) px(a.points[1].x, a.points[1].y)
+                       else (sx + dp(6f)) to (sy + dp(6f))
+        strokePaint.color = withAlpha(color, a.alpha)
+        strokePaint.strokeWidth = dp(3f)
+        canvas.drawRect(minOf(sx, ex), minOf(sy, ey), maxOf(sx, ex), maxOf(sy, ey), strokePaint)
     }
 
     private fun drawArrow(canvas: Canvas, a: RenderAnnotation, color: Int) {

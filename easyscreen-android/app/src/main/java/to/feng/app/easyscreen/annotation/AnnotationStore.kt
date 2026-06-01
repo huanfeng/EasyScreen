@@ -60,7 +60,7 @@ class AnnotationStore(
                         it.points.clear()
                         it.points.add(NPoint(p.x, p.y))
                     }
-                    DrawTool.CIRCLE, DrawTool.ARROW -> {
+                    DrawTool.CIRCLE, DrawTool.RECT, DrawTool.ARROW -> {
                         if (it.points.size < 2) it.points.add(NPoint(p.x, p.y))
                         else it.points[1] = NPoint(p.x, p.y)
                     }
@@ -69,7 +69,7 @@ class AnnotationStore(
 
             DrawOp.END -> {
                 val it = items[p.id] ?: return
-                if (p.tool == DrawTool.CIRCLE || p.tool == DrawTool.ARROW) {
+                if (p.tool == DrawTool.CIRCLE || p.tool == DrawTool.RECT || p.tool == DrawTool.ARROW) {
                     if (p.x2 != 0f || p.y2 != 0f) {
                         // 显式带了终点 → 用它
                         val edge = NPoint(p.x2, p.y2)

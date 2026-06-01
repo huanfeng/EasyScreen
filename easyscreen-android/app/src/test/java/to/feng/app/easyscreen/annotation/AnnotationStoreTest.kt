@@ -68,6 +68,18 @@ class AnnotationStoreTest {
     }
 
     @Test
+    fun rectEnd_withoutExplicitEdge_preservesLastDragPoint() {
+        val store = AnnotationStore()
+        store.apply(DrawPayload(id = "r", op = DrawOp.BEGIN, tool = DrawTool.RECT, x = 0.2f, y = 0.2f), 0)
+        store.apply(DrawPayload(id = "r", op = DrawOp.POINT, tool = DrawTool.RECT, x = 0.6f, y = 0.5f), 5)
+        store.apply(DrawPayload(id = "r", op = DrawOp.END, tool = DrawTool.RECT, x = 0.2f, y = 0.2f), 10)
+        val pts = store.snapshot(20)[0].points
+        assertEquals(2, pts.size)
+        assertEquals(0.6f, pts[1].x, 0.001f)
+        assertEquals(0.5f, pts[1].y, 0.001f)
+    }
+
+    @Test
     fun rippleTap_isFinishedImmediately() {
         val store = AnnotationStore()
         store.apply(DrawPayload(id = "r", op = DrawOp.TAP, tool = DrawTool.RIPPLE, x = 0.3f, y = 0.4f), 0)

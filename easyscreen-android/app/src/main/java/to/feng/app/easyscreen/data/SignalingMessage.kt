@@ -71,6 +71,7 @@ object DrawTool {
     const val LASER = "laser"    // 实时指针，不留痕
     const val PEN = "pen"        // 自由画笔
     const val CIRCLE = "circle"  // 圆圈/圈选
+    const val RECT = "rect"      // 矩形框
     const val ARROW = "arrow"    // 箭头
     const val RIPPLE = "ripple"  // 点击波纹
 }

@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import to.feng.app.easyscreen.annotation.AnnotationStore
 import to.feng.app.easyscreen.annotation.CoordinateMapping
 import to.feng.app.easyscreen.data.DrawOp
@@ -161,8 +163,17 @@ fun AnnotationLayer(
                         val r = if (a.points.size >= 2) {
                             val e = px(a.points[1].x, a.points[1].y)
                             hypot((e.x - c.x).toDouble(), (e.y - c.y).toDouble()).toFloat()
-                        } else 60.dp.toPx()
-                        drawCircle(col, r.coerceAtLeast(8.dp.toPx()), c, style = Stroke(width = 5.dp.toPx()))
+                        } else 6.dp.toPx()   // 未拖动默认最小，避免先出大圈再跳变
+                        drawCircle(col, r.coerceAtLeast(3.dp.toPx()), c, style = Stroke(width = 3.dp.toPx()))
+                    }
+                    DrawTool.RECT -> if (a.points.isNotEmpty()) {
+                        val s = px(a.points[0].x, a.points[0].y)
+                        val e = if (a.points.size >= 2) px(a.points[1].x, a.points[1].y)
+                                else Offset(s.x + 6.dp.toPx(), s.y + 6.dp.toPx())
+                        drawRect(col,
+                            topLeft = Offset(minOf(s.x, e.x), minOf(s.y, e.y)),
+                            size = androidx.compose.ui.geometry.Size(kotlin.math.abs(e.x - s.x), kotlin.math.abs(e.y - s.y)),
+                            style = Stroke(width = 3.dp.toPx()))
                     }
                     DrawTool.ARROW -> if (a.points.size >= 2) {
                         val s = px(a.points[0].x, a.points[0].y)
@@ -191,13 +202,16 @@ fun AnnotationLayer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
-                .padding(top = 8.dp)
+                .padding(top = 8.dp, start = 8.dp, end = 8.dp)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
                 .background(Color.Black.copy(alpha = 0.55f))
+                .horizontalScroll(rememberScrollState())   // 工具过多时横向滚动，避免显示不全
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolButton("○", tool == DrawTool.CIRCLE) { tool = DrawTool.CIRCLE }
+            ToolButton("▭", tool == DrawTool.RECT) { tool = DrawTool.RECT }
             ToolButton("→", tool == DrawTool.ARROW) { tool = DrawTool.ARROW }
             ToolButton("✎", tool == DrawTool.PEN) { tool = DrawTool.PEN }
             ToolButton("·", tool == DrawTool.RIPPLE) { tool = DrawTool.RIPPLE }
