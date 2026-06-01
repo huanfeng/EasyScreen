@@ -74,4 +74,24 @@ assert(CoordinateMapping.touchToNormalized(10, 10, 100, 100, 0, 0, false) === nu
   assert(s.snapshot(500).length === 0, 'laser fades quickly');
 }
 
+// ---- 渲染映射与触点输入对称（本地回显对齐回归）----
+{
+  // contain：源 1000x500，舞台 1000x600（上下黑边各 50）；触点中心应原样还原
+  const n = CoordinateMapping.touchToNormalized(500, 300, 1000, 600, 1000, 500, false);
+  const p = CoordinateMapping.normalizedToContentPixel(n[0], n[1], 1000, 600, 1000, 500, false);
+  assert(Math.abs(p[0] - 500) < 1e-3 && Math.abs(p[1] - 300) < 1e-3, 'contain round-trip center');
+}
+{
+  // 内容区左上角：touch=(0,50) → norm≈(0,0) → 还原到 (0,50)，而非 (0,0)
+  const n = CoordinateMapping.touchToNormalized(0, 50, 1000, 600, 1000, 500, false);
+  const p = CoordinateMapping.normalizedToContentPixel(n[0], n[1], 1000, 600, 1000, 500, false);
+  assert(Math.abs(p[0] - 0) < 1e-3 && Math.abs(p[1] - 50) < 1e-3, 'contain round-trip corner (letterbox offset preserved)');
+}
+{
+  // cover：源 1000x500，舞台 600x600（左右裁剪）；触点原样还原
+  const n = CoordinateMapping.touchToNormalized(300, 300, 600, 600, 1000, 500, true);
+  const p = CoordinateMapping.normalizedToContentPixel(n[0], n[1], 600, 600, 1000, 500, true);
+  assert(Math.abs(p[0] - 300) < 1e-3 && Math.abs(p[1] - 300) < 1e-3, 'cover round-trip');
+}
+
 console.log('✓ all web annotation logic tests passed');

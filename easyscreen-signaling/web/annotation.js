@@ -25,6 +25,16 @@
       return [clamp01(nx), clamp01(ny)];
     },
     normalizedToPixel: function (nx, ny, viewW, viewH) { return [nx * viewW, ny * viewH]; },
+    // 归一化 [0,1] → 舞台内"视频内容区"像素（contain/cover 的 letterbox 反算，与 touchToNormalized 对称）
+    normalizedToContentPixel: function (nx, ny, stageW, stageH, srcW, srcH, fillCover) {
+      if (srcW <= 0 || srcH <= 0 || stageW <= 0 || stageH <= 0) return [nx * stageW, ny * stageH];
+      const scale = fillCover
+        ? Math.max(stageW / srcW, stageH / srcH)
+        : Math.min(stageW / srcW, stageH / srcH);
+      const cw = srcW * scale, ch = srcH * scale;
+      const ox = (stageW - cw) / 2, oy = (stageH - ch) / 2;
+      return [ox + nx * cw, oy + ny * ch];
+    },
   };
 
   class AnnotationStore {
@@ -183,7 +193,13 @@
     canvasEl.addEventListener('pointerup', onUp);
     canvasEl.addEventListener('pointercancel', onUp);
 
-    function px(n, rect) { return [n[0] * rect.width, n[1] * rect.height]; }
+    // 映射回"视频内容区"而非整个舞台，与触点输入对称（修复本地回显以整页为坐标的偏移）
+    function px(n, rect) {
+      return CoordinateMapping.normalizedToContentPixel(
+        n[0], n[1], rect.width, rect.height,
+        videoEl.videoWidth || 0, videoEl.videoHeight || 0, !!getFitCover(),
+      );
+    }
     function draw() {
       const rect = stageEl.getBoundingClientRect();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
