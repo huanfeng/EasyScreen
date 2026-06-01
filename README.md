@@ -77,6 +77,8 @@ ghcr.io/huanfeng/easyscreen-signaling:latest
 
 启用方式：在 docker-compose 环境变量设置 `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭）。可选 `EASYSCREEN_GITHUB_TOKEN` 提高 GitHub API 限流。APK 缓存在命名卷 `easyscreen-apk-cache`（容器内 `/app/cache`），不烧进镜像。
 
+> **仓库必须为 public**：信令服务器以匿名方式拉取 Release 的 `version.json` 与 APK。私有仓库当前不支持（其 asset 二进制需经 GitHub asset API 端点 + token 下载，本实现走的是匿名 `browser_download_url`）。
+
 发版流程不变：打 `v*` tag → CI 构建 APK 并生成 `version.json` 一起发布到 GitHub Release → 服务器下次请求时自动同步。tag 注释信息（`git tag -a v1.2.2 -m "..."`）作为更新说明；注释含 `[force]` 时该版本标记为强制更新。
 
 ## 服务状态端点
