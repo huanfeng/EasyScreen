@@ -20,9 +20,6 @@ jobs:
         working-directory: easyscreen-android
     steps:
       - uses: actions/checkout@v4
-        with:
-          # 取完整历史与 annotated tag 对象，供 version.json 读取 tag 注释作为 releaseNotes
-          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -83,6 +80,8 @@ jobs:
 
       - name: Generate version.json
         if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # working-directory 已是 easyscreen-android，故用相对该目录的路径
           APK_DIR=app/build/outputs/apk/release
@@ -91,8 +90,14 @@ jobs:
           VERSION_CODE="${{ github.run_number }}"
           SHA256=$(sha256sum "$APK_PATH" | awk '{print $1}')
           FILE_SIZE=$(stat -c%s "$APK_PATH")
-          # tag 注释信息作为更新说明；含 [force] 则标记强制更新
-          TAG_MSG=$(git tag -l --format='%(contents)' "v${VERSION_NAME}")
+          # 通过 GitHub API 读 annotated tag 注释作为更新说明（CI checkout 的本地 tag 是 peeled commit，git tag -l 取不到注释）；含 [force] 则标记强制更新
+          TAG_REF=$(gh api "repos/${{ github.repository }}/git/ref/tags/v${VERSION_NAME}" --jq '.object.type+" "+.object.sha')
+          TAG_TYPE=${TAG_REF%% *}; TAG_SHA=${TAG_REF##* }
+          if [ "$TAG_TYPE" = "tag" ]; then
+            TAG_MSG=$(gh api "repos/${{ github.repository }}/git/tags/${TAG_SHA}" --jq '.message')
+          else
+            TAG_MSG=""
+          fi
           if echo "$TAG_MSG" | grep -q '\[force\]'; then FORCE=true; else FORCE=false; fi
           RELEASE_NOTES=$(echo "$TAG_MSG" | sed 's/\[force\]//g' | sed ':a;N;$!ba;s/\n/ /g' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
           # 用 jq 生成，自动转义 releaseNotes 中的引号/特殊字符，避免破坏 JSON

@@ -31,7 +31,8 @@ RUN apk add --no-cache ca-certificates tzdata && \
 WORKDIR /app
 COPY --from=builder /build/easyscreen-signaling .
 COPY web ./web
-RUN chown -R app:app /app
+# 预建 APK 缓存目录并归属 app 用户：否则命名卷挂载 /app/cache 会以 root 创建，导致非 root 的 app 用户无法写入
+RUN mkdir -p /app/cache && chown -R app:app /app
 
 USER app
 
