@@ -20,6 +20,9 @@ jobs:
         working-directory: easyscreen-android
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 取完整历史与 annotated tag 对象，供 version.json 读取 tag 注释作为 releaseNotes
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
