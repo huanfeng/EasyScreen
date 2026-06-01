@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -214,5 +215,47 @@ func TestDownloadEndpointServesApk(t *testing.T) {
 	}
 	if w.Body.String() != string(apk) {
 		t.Fatal("apk content mismatch")
+	}
+}
+
+func TestSyncSkipsRedownloadSameVersion(t *testing.T) {
+	apk := []byte("apk-content-v3")
+	info := AppVersionInfo{
+		VersionCode: 3, VersionName: "1.0", SHA256: sha256hex(apk),
+		FileSize: int64(len(apk)), MinSupportedVersionCode: 1, DownloadURL: "/app/download",
+	}
+	var apkHits int32
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/repos/owner/repo/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(ghRelease{
+			TagName: "v1.0",
+			Assets: []ghAsset{
+				{Name: "version.json", BrowserDownloadURL: srv.URL + "/dl/version.json"},
+				{Name: "app-release.apk", BrowserDownloadURL: srv.URL + "/dl/app.apk"},
+			},
+		})
+	})
+	mux.HandleFunc("/dl/version.json", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(info)
+	})
+	mux.HandleFunc("/dl/app.apk", func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&apkHits, 1)
+		w.Write(apk)
+	})
+
+	dir := t.TempDir()
+	u := NewAppUpdater("owner/repo", "", dir, 0) // ttl=0：每次都尝试刷新
+	u.githubAPI = srv.URL
+
+	if err := u.sync(); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	if err := u.sync(); err != nil {
+		t.Fatalf("second sync: %v", err)
+	}
+	if got := atomic.LoadInt32(&apkHits); got != 1 {
+		t.Fatalf("expected APK downloaded once, got %d", got)
 	}
 }

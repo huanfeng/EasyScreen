@@ -126,6 +126,20 @@ func (u *AppUpdater) sync() error {
 		return err
 	}
 
+	// 版本未变且本地 APK 仍在 → 跳过重复下载，仅刷新同步时间
+	u.mu.Lock()
+	cached := u.info
+	cachedApk := u.apkPath
+	u.mu.Unlock()
+	if cached != nil && info.VersionCode <= cached.VersionCode && cachedApk != "" {
+		if _, statErr := os.Stat(cachedApk); statErr == nil {
+			u.mu.Lock()
+			u.lastSync = u.now()
+			u.mu.Unlock()
+			return nil
+		}
+	}
+
 	// 下载 APK 到临时文件并校验 sha256
 	apkPath := filepath.Join(u.cacheDir, fmt.Sprintf("app-%d.apk", info.VersionCode))
 	if err := os.MkdirAll(u.cacheDir, 0o755); err != nil {
