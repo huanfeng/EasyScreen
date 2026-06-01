@@ -273,6 +273,19 @@
     });
     if (exitBtn) exitBtn.addEventListener('click', () => setActive(false));
 
+    // 工具条位置（上/右/下/左，持久化），点 ⤢ 循环切换，适应不同遮挡
+    const POSITIONS = ['top', 'right', 'bottom', 'left'];
+    let posIdx = Math.max(0, POSITIONS.indexOf(localStorage.getItem('easyscreen.annoPos') || 'top'));
+    function applyPos() {
+      const p = POSITIONS[posIdx];
+      toolbarEl.classList.remove('pos-top', 'pos-right', 'pos-bottom', 'pos-left');
+      toolbarEl.classList.add('pos-' + p);
+      try { localStorage.setItem('easyscreen.annoPos', p); } catch (_) {}
+    }
+    const posBtn = toolbarEl.querySelector('#anno-pos');
+    if (posBtn) posBtn.addEventListener('click', () => { posIdx = (posIdx + 1) % POSITIONS.length; applyPos(); });
+    applyPos();
+
     function setActive(on) {
       if (active === on) return;
       active = on;

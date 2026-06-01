@@ -74,8 +74,8 @@
       <!-- 进入标注模式入口（左下，zoom-bar 上方） -->
       <button id="annotate-btn" class="floating-action floating-annotate" aria-label="标注">✎</button>
 
-      <!-- 标注工具条（顶部居中，默认隐藏） -->
-      <div id="annotation-toolbar" class="annotation-toolbar hidden">
+      <!-- 标注工具条（位置可切换上/右/下/左，默认隐藏） -->
+      <div id="annotation-toolbar" class="annotation-toolbar pos-top hidden">
         <button class="anno-tool" data-tool="circle" title="圆圈">○</button>
         <button class="anno-tool" data-tool="arrow" title="箭头">→</button>
         <button class="anno-tool" data-tool="pen" title="自由画笔">✎</button>
@@ -87,6 +87,7 @@
         <button class="anno-color" data-color="#34C759" style="background:#34C759"></button>
         <button class="anno-color" data-color="#0A84FF" style="background:#0A84FF"></button>
         <span class="anno-sep"></span>
+        <button id="anno-pos" class="anno-text-btn" title="切换工具条位置（上/右/下/左）">⤢</button>
         <button id="anno-clear" class="anno-text-btn" title="清空">清空</button>
         <button id="anno-exit" class="anno-text-btn" title="退出标注">✕</button>
       </div>

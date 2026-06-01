@@ -414,9 +414,6 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
 
 .annotation-toolbar {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -427,6 +424,26 @@ body { overflow: hidden; }     /* 视频阶段全屏时禁止滚动 */
   -webkit-backdrop-filter: blur(8px);
   z-index: 22;            /* 工具条须在叠加 canvas 之上，可点 */
 }
+/* 四向位置：上/下为横排，左/右为竖排 */
+.annotation-toolbar.pos-top {
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%; transform: translateX(-50%); flex-direction: row;
+}
+.annotation-toolbar.pos-bottom {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  left: 50%; transform: translateX(-50%); flex-direction: row;
+}
+.annotation-toolbar.pos-left {
+  left: calc(env(safe-area-inset-left, 0px) + 12px);
+  top: 50%; transform: translateY(-50%); flex-direction: column;
+}
+.annotation-toolbar.pos-right {
+  right: calc(env(safe-area-inset-right, 0px) + 12px);
+  top: 50%; transform: translateY(-50%); flex-direction: column;
+}
+/* 竖排时分隔线转为横向 */
+.annotation-toolbar.pos-left .anno-sep,
+.annotation-toolbar.pos-right .anno-sep { width: 22px; height: 1px; margin: 4px 0; }
 .anno-tool, .anno-text-btn {
   min-width: 34px; height: 34px;
   border: none; border-radius: 16px;
