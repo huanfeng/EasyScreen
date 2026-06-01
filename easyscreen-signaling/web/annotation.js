@@ -289,6 +289,9 @@
     resizeCanvas();
     rafId = requestAnimationFrame(draw);
     refreshToolbarUI();
+
+    // 暴露给宿主：断开/重连时清空本地回显并退出标注模式，避免旧标注残留
+    api.reset = function () { store.clear(); setActive(false); };
   }
 
   const api = { CoordinateMapping, AnnotationStore, DrawOp, DrawTool, init };

@@ -243,7 +243,11 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
                 diagnosticsCollector.stopTrack(gid)
                 pendingOffers.remove(gid)
                 pendingCandidates.remove(gid)
-                if (_guests.value.isEmpty()) _guestConnected.value = false
+                if (_guests.value.isEmpty()) {
+                    _guestConnected.value = false
+                    // 观众全部离开 → 清除老人端浮窗残留标注
+                    to.feng.app.easyscreen.annotation.AnnotationOverlayManager.hide()
+                }
                 _statusMessage.value = summarizeGuestStates()
             }
 

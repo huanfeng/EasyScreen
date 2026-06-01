@@ -621,6 +621,8 @@
   // ---------- 清理 ----------
   function teardownInternal() {
     console.log('[teardownInternal]');
+    // 断开时清空标注本地回显并退出标注模式，避免旧绘制残留到下次连接
+    if (window.AnnotationOverlay && window.AnnotationOverlay.reset) window.AnnotationOverlay.reset();
     stopStats();
     pendingRemoteCandidates = [];
     hasRemoteDescription = false;
