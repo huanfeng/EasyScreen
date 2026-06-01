@@ -35,9 +35,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,11 +51,18 @@ import to.feng.app.easyscreen.BuildConfig
 import to.feng.app.easyscreen.data.HostTokenPrefs
 import to.feng.app.easyscreen.data.QualityPrefs
 import to.feng.app.easyscreen.data.ServerPrefs
+import to.feng.app.easyscreen.ui.update.UpdateDialog
+import to.feng.app.easyscreen.update.ApkInstaller
+import to.feng.app.easyscreen.update.UpdateController
+import to.feng.app.easyscreen.update.UpdateState
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val updateController = remember { UpdateController() }
+    val updateState by updateController.state.collectAsState()
     var serverUrl by rememberSaveable { mutableStateOf(ServerPrefs.get(context)) }
     var qualityId by rememberSaveable { mutableStateOf(QualityPrefs.get(context).id) }
 
@@ -177,6 +186,34 @@ fun SettingsScreen(onBack: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("检查更新", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = when (val s = updateState) {
+                                is UpdateState.Checking -> "检查中…"
+                                is UpdateState.UpToDate -> "已是最新版本"
+                                is UpdateState.Failed -> s.message
+                                else -> "从服务器获取最新版本"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedButton(onClick = {
+                        updateController.check(
+                            scope = scope,
+                            context = context,
+                            wsServerUrl = serverUrl,
+                            currentCode = BuildConfig.VERSION_CODE,
+                            silent = false,
+                        )
+                    }) { Text("检查") }
+                }
                 HorizontalDivider()
                 Text(
                     text = "远程看屏",
@@ -190,6 +227,22 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+            UpdateDialog(
+                state = updateState,
+                onUpdate = {
+                    if (ApkInstaller.canInstall(context)) updateController.startDownload(scope, context, serverUrl)
+                    else ApkInstaller.openInstallPermissionSettings(context)
+                },
+                onInstall = {
+                    val s = updateState
+                    if (s is UpdateState.ReadyToInstall) {
+                        if (ApkInstaller.canInstall(context)) ApkInstaller.install(context, s.apk)
+                        else ApkInstaller.openInstallPermissionSettings(context)
+                    }
+                },
+                onSkip = { updateController.dismiss() },
+                onDismiss = { updateController.dismiss() },
+            )
         }
     }
 }
