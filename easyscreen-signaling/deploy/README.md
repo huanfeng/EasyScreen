@@ -96,7 +96,7 @@ sudo systemctl restart easyscreen-signaling
 
 让信令服务作为 GitHub Release 的国内缓存代理，老人端 App 即可自动检查/下载更新。在 systemd service 的环境变量中加入：
 
-- `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭更新端点）
+- `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭更新端点；仓库须为 public）
 - 可选 `EASYSCREEN_GITHUB_TOKEN`（提高 GitHub API 限流）
 - `EASYSCREEN_APP_CACHE_DIR`（可写目录，如 `/var/lib/easyscreen/cache`）
 

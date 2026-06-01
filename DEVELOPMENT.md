@@ -141,8 +141,9 @@ Docker 推送使用内置 `GITHUB_TOKEN`，无需额外 Secret（workflow 已声
 
 ## App 在线更新机制
 
-- **CI**：`android.yml` 在 tag 构建时除 APK 外生成 `version.json`（versionCode/versionName/sha256/fileSize/forceUpdate/minSupportedVersionCode/releaseNotes/downloadUrl），用 `jq` 生成以安全转义注释文本，一并附到 GitHub Release。
-- **信令服务**：`app_update.go` 懒加载（默认 TTL 15min）从 GitHub `releases/latest` 同步 `version.json` 与 APK 到 `EASYSCREEN_APP_CACHE_DIR`，sha256 校验后缓存；并发请求有防重入；GitHub 不可达时降级返回旧缓存。环境变量：`EASYSCREEN_GITHUB_REPO`、`EASYSCREEN_GITHUB_TOKEN`、`EASYSCREEN_APP_CACHE_DIR`、`EASYSCREEN_APP_SYNC_TTL`。
+- **CI**：`android.yml` 在 tag 构建时除 APK 外用 `jq` 生成 `version.json`（versionCode/versionName/sha256/fileSize/forceUpdate/minSupportedVersionCode/releaseNotes/downloadUrl）一并附到 Release。`versionCode` 取 `github.run_number`（不连续但单调递增）。`releaseNotes` 与 `[force]` 标记经 **GitHub API**（`gh api repos/<repo>/git/tags/<sha>`，需 `GH_TOKEN`）读取 annotated tag 注释——CI 浅 checkout 下本地 tag 是 peeled commit，`git tag -l --format='%(contents)'` 会误取成 commit message。
+- **信令服务**：`app_update.go` 懒加载（默认 TTL 15min）从 GitHub `releases/latest` 同步 `version.json` 与 APK 到 `EASYSCREEN_APP_CACHE_DIR`，sha256 校验后缓存；并发请求有防重入；版本未变跳过重复下载；GitHub 不可达时降级返回旧缓存。环境变量：`EASYSCREEN_GITHUB_REPO`、`EASYSCREEN_GITHUB_TOKEN`、`EASYSCREEN_APP_CACHE_DIR`、`EASYSCREEN_APP_SYNC_TTL`。
+- **缓存与权限**：缓存落容器内 `/app/cache`，`Dockerfile` 已 `mkdir -p /app/cache && chown app`，使命名卷挂载也能被非 root 的 `app` 用户写入——否则 sync 因 Permission denied 失败、端点返回 503。仓库须为 public（匿名 `browser_download_url` 下载）。
 - **安卓端**：`update/` 包。启动静默检查、设置页手动检查；比较 `BuildConfig.VERSION_CODE`；下载到 `externalCacheDir/update/`、sha256 校验；经 FileProvider（`${applicationId}.fileprovider`）触发系统安装器，需 `REQUEST_INSTALL_PACKAGES` 权限 + 用户授权「允许安装未知应用」。
 - **强制更新**：`forceUpdate=true` 或当前 `versionCode < minSupportedVersionCode` 时对话框不可取消。
 

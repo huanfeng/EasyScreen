@@ -75,11 +75,37 @@ ghcr.io/huanfeng/easyscreen-signaling:latest
 | `/app/version.json` | 最新版本元数据（懒加载从 GitHub 同步并缓存） |
 | `/app/download` | 缓存的最新 APK（支持断点续传） |
 
-启用方式：在 docker-compose 环境变量设置 `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭）。可选 `EASYSCREEN_GITHUB_TOKEN` 提高 GitHub API 限流。APK 缓存在命名卷 `easyscreen-apk-cache`（容器内 `/app/cache`），不烧进镜像。
+启用方式：在 docker-compose 的 `environment` 设置 `EASYSCREEN_GITHUB_REPO=<owner>/<repo>`（留空则关闭更新端点）。可选项见下表。
 
-> **仓库必须为 public**：信令服务器以匿名方式拉取 Release 的 `version.json` 与 APK。私有仓库当前不支持（其 asset 二进制需经 GitHub asset API 端点 + token 下载，本实现走的是匿名 `browser_download_url`）。
+| 环境变量 | 默认 | 说明 |
+|----------|------|------|
+| `EASYSCREEN_GITHUB_REPO` | 空（关闭） | 形如 `huanfeng/EasyScreen`，仓库须为 **public** |
+| `EASYSCREEN_GITHUB_TOKEN` | 空 | 可选，提高 GitHub API 限流；public 仓库可不配 |
+| `EASYSCREEN_APP_CACHE_DIR` | `/app/cache` | APK 缓存目录 |
+| `EASYSCREEN_APP_SYNC_TTL` | `15m` | 缓存有效期，超时才回源 GitHub |
 
-发版流程不变：打 `v*` tag → CI 构建 APK 并生成 `version.json` 一起发布到 GitHub Release → 服务器下次请求时自动同步。tag 注释信息（`git tag -a v1.2.2 -m "..."`）作为更新说明；注释含 `[force]` 时该版本标记为强制更新。
+> **仓库必须为 public**：服务器以匿名方式拉取 Release 的 `version.json` 与 APK（走 `browser_download_url`）。私有仓库当前不支持（其 asset 需经 GitHub asset API + token 下载）。
+>
+> **缓存与权限**：APK 缓存在容器内 `/app/cache`，不烧进镜像。如需重启保留缓存，可挂命名卷 `easyscreen-apk-cache`——镜像已预建该目录并归属运行用户 `app`，避免非 root 用户写入被拒（否则同步失败返回 503）。VPS 回源 GitHub 通常很快，不挂卷也可（重启后首个请求重新同步）。
+
+### 发版
+
+打一个带注释的 tag 即可，其余全自动：
+
+```bash
+git tag -a v1.3.3 -m "更新说明文字"      # 注释含 [force] 则该版本标记为强制更新
+git push origin v1.3.3
+```
+
+CI 自动构建签名 APK + 生成 `version.json`，一起发布到 GitHub Release；服务器在缓存超过 TTL 后的下一个请求自动同步。`versionName` 取自 tag（去 `v`），`versionCode` 用 CI 运行号（不连续但单调递增）。tag 注释作为更新说明（`releaseNotes`），含 `[force]` 时置 `forceUpdate=true`。
+
+### 故障排查
+
+| 现象 | 可能原因 |
+|------|----------|
+| App 检查更新 **404** | 服务器跑的是旧版本（无 `/app/version.json` 端点），或未设 `EASYSCREEN_GITHUB_REPO`。`curl https://域名/version` 看 `git_commit` 是否为含本功能的提交 |
+| App 检查更新 **503** | 服务器同步失败：仓库非 public、缓存目录不可写（命名卷权限）、或 VPS 访问 GitHub 失败。`curl https://域名/app/version.json` 复现 |
+| 反代未放行 | 确保反代把 `/app/version.json`、`/app/download` 转发到信令服务（APK 较大，注意 body 大小限制） |
 
 ## 服务状态端点
 
