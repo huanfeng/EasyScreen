@@ -46,8 +46,8 @@ class AnnotationOverlayView(context: Context) : View(context) {
     }
 
     companion object {
-        /** 调试：画出浮窗实际可绘制边框，确认与全屏采集画面的差异。验证后改回 false。 */
-        var DEBUG_BOUNDS = true
+        /** 画出浮窗实际可绘制边框（默认关，由 Guest 端远程控制开关，用于诊断覆盖范围）。 */
+        var DEBUG_BOUNDS = false
     }
 
     /** 由浮窗管理器在收到 draw_command 时调用。 */

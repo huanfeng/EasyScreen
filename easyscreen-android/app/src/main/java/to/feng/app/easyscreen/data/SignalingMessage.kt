@@ -62,6 +62,8 @@ object DrawOp {
     const val END = "end"       // 结束（开始淡出计时）
     const val TAP = "tap"       // 单击（波纹）
     const val CLEAR = "clear"   // 清空全部
+    const val BOUNDS_ON = "bounds_on"    // Guest 远程：显示浮窗可绘制边框（诊断）
+    const val BOUNDS_OFF = "bounds_off"  // Guest 远程：隐藏浮窗边框
 }
 
 /** 画笔工具 */

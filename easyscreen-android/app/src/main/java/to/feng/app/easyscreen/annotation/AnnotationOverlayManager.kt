@@ -41,6 +41,17 @@ object AnnotationOverlayManager {
         }
     }
 
+    /** Guest 远程切换浮窗可绘制边框（诊断用），无需依赖是否有标注。 */
+    fun setDebugBounds(context: Context, on: Boolean) {
+        AnnotationOverlayView.DEBUG_BOUNDS = on
+        val appCtx = context.applicationContext
+        if (on) {
+            if (!hasPermission(appCtx)) return
+            ensureAdded(appCtx)
+        }
+        view?.postInvalidate()
+    }
+
     private fun ensureAdded(appCtx: Context) {
         if (added && view != null) return
         val wm = appCtx.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return

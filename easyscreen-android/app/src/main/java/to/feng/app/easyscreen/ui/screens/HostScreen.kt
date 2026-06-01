@@ -297,9 +297,12 @@ class HostViewModel(private val serverUrl: String, private val appContext: andro
                 val payload = try {
                     gson.fromJson(gson.toJson(message.payload), DrawPayload::class.java)
                 } catch (e: Exception) { return }
-                // 浮窗只在共享进行中有意义
-                if (_isSharing.value) {
-                    to.feng.app.easyscreen.annotation.AnnotationOverlayManager.submit(appContext, payload)
+                val mgr = to.feng.app.easyscreen.annotation.AnnotationOverlayManager
+                when (payload.op) {
+                    DrawOp.BOUNDS_ON -> mgr.setDebugBounds(appContext, true)
+                    DrawOp.BOUNDS_OFF -> mgr.setDebugBounds(appContext, false)
+                    // 浮窗只在共享进行中有意义
+                    else -> if (_isSharing.value) mgr.submit(appContext, payload)
                 }
             }
 

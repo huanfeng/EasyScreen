@@ -451,15 +451,34 @@ class WebRTCManager private constructor() {
         _captureReady.value = true
     }
 
-    /** 根据当前屏幕方向算出"长边 vs 短边"应该填给 startCapture 的 W/H */
+    /**
+     * 计算采集 W/H：短边取画质档位短边，长边按"屏幕真实宽高比"推导，
+     * 避免 16:9 档位塞进非 16:9 屏幕产生黑边（pillarbox/letterbox）。
+     * 黑边的两个危害：① 观看端看到黑边；② 标注归一化坐标按整帧算，与真实屏幕错位（横向偏移）。
+     * 16:9 屏幕的结果与原档位一致（向后兼容）。
+     */
     private fun computeCaptureSize(): Pair<Int, Int> {
         val ctx = appContext ?: return hostBaseLong to hostBaseShort
         val dm = ctx.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-        val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
-        val rotation = display?.rotation ?: Surface.ROTATION_0
+        val display = dm?.getDisplay(Display.DEFAULT_DISPLAY) ?: return hostBaseLong to hostBaseShort
+        val rotation = display.rotation
         val isPortrait = rotation == Surface.ROTATION_0 || rotation == Surface.ROTATION_180
-        return if (isPortrait) hostBaseShort to hostBaseLong  // 竖屏：短边为宽，长边为高
-               else hostBaseLong to hostBaseShort              // 横屏：长边为宽
+
+        val metrics = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") display.getRealMetrics(metrics)
+        val screenLong = maxOf(metrics.widthPixels, metrics.heightPixels)
+        val screenShort = minOf(metrics.widthPixels, metrics.heightPixels)
+
+        val capShort = hostBaseShort
+        val capLong = if (screenShort > 0 && screenLong > 0) {
+            var v = Math.round(capShort.toFloat() * screenLong / screenShort)
+            if (v % 2 != 0) v++   // 编码器要求偶数
+            v
+        } else {
+            hostBaseLong
+        }
+        return if (isPortrait) capShort to capLong  // 竖屏：短边为宽，长边为高
+               else capLong to capShort              // 横屏：长边为宽
     }
 
     private fun registerDisplayListener() {
